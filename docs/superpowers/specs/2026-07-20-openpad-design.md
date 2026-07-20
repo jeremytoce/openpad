@@ -137,7 +137,7 @@ Row 1 is the **agent bar** on every layer: each key IS an agent — its LED show
 
 1. **HUD** (seen most): always-on-top overlay; fades in on pad touch or `⇧ LAYER` hold, fades out ~1.5s after. Shows the current layer's key legend (the pad has no printed legends) plus a status line with the bound agent, its state, and **the pending tool call when WAITING**. That last line is the safety mechanism: a physical approve key must never fire blind.
 2. **Menu bar item**: connection status, active agent, pause toggle.
-3. **Config window**: visual keymap editor (click a key on a rendered pad, pick an action), adapter profile editing, Wispr hotkey setting, prompt template slots.
+3. **Config window**: visual keymap editor (click a key on a rendered pad, pick an action), adapter profile editing, Wispr hotkey setting, prompt template slots. **Runs entirely locally** inside the openpad binary (Tauri window) — no hosted service, no account, no network dependency; all config persists to local files (`~/.config/openpad/`) that are hand-editable and versionable.
 
 ## Stack
 
