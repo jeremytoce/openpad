@@ -1,6 +1,6 @@
 {
-  "name": "KB16-01 openpad",
-  "vendorProductId": -804252159,
+  "name": "KB16-01",
+  "vendorProductId": 3490715137,
   "macros": [
     "",
     "",
@@ -25,63 +25,44 @@
       "KC_F14",
       "KC_F15",
       "KC_F16",
-      "LALT(KC_F19)",
-      "LALT(KC_F20)",
+      "A(KC_F19)",
+      "A(KC_F20)",
       "KC_F17",
       "KC_F18",
       "KC_F19",
       "KC_F20",
-      "LSFT(KC_F13)",
-      "LSFT(KC_F14)",
-      "LSFT(KC_F15)",
-      "LSFT(KC_F16)",
+      "S(KC_F13)",
+      "S(KC_F14)",
+      "S(KC_F15)",
+      "S(KC_F16)",
       "LSA(KC_F13)",
-      "LSFT(KC_F17)",
-      "LSFT(KC_F18)",
-      "LSFT(KC_F19)",
-      "MO(1)"
+      "S(KC_F17)",
+      "S(KC_F18)",
+      "S(KC_F19)",
+      "MO(1)",
+      "KC_NO"
     ],
     [
-      "LCTL(KC_F13)",
-      "LCTL(KC_F14)",
-      "LCTL(KC_F15)",
-      "LCTL(KC_F16)",
+      "C(KC_F13)",
+      "C(KC_F14)",
+      "C(KC_F15)",
+      "C(KC_F16)",
       "KC_TRNS",
       "KC_TRNS",
-      "LCTL(KC_F17)",
-      "LCTL(KC_F18)",
-      "LCTL(KC_F19)",
-      "LCTL(KC_F20)",
-      "LCTL(LSFT(KC_F13))",
-      "LCTL(LSFT(KC_F14))",
-      "LCTL(LSFT(KC_F15))",
-      "LCTL(LSFT(KC_F16))",
+      "C(KC_F17)",
+      "C(KC_F18)",
+      "C(KC_F19)",
+      "C(KC_F20)",
+      "C(S(KC_F13))",
+      "C(S(KC_F14))",
+      "C(S(KC_F15))",
+      "C(S(KC_F16))",
       "KC_TRNS",
-      "LCTL(LSFT(KC_F17))",
-      "LCTL(LSFT(KC_F18))",
-      "LCTL(LSFT(KC_F19))",
-      "TG(1)"
-    ],
-    [
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS",
-      "KC_TRNS"
+      "C(S(KC_F17))",
+      "C(S(KC_F18))",
+      "C(S(KC_F19))",
+      "TG(1)",
+      "KC_NO"
     ],
     [
       "KC_TRNS",
@@ -102,64 +83,85 @@
       "KC_TRNS",
       "KC_TRNS",
       "KC_TRNS",
-      "KC_TRNS"
+      "KC_TRNS",
+      "KC_NO"
+    ],
+    [
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_TRNS",
+      "KC_NO"
     ]
   ],
   "encoders": [
     [
       [
-        "LALT(KC_F13)",
-        "LALT(KC_F14)"
+        "A(KC_F13)",
+        "A(KC_F14)"
       ],
       [
-        "LALT(KC_F15)",
-        "LALT(KC_F16)"
+        "A(KC_F13)",
+        "A(KC_F14)"
       ],
       [
-        "LALT(KC_F17)",
-        "LALT(KC_F18)"
+        "A(KC_F13)",
+        "A(KC_F14)"
+      ],
+      [
+        "A(KC_F13)",
+        "A(KC_F14)"
       ]
     ],
     [
       [
-        "LALT(KC_F13)",
-        "LALT(KC_F14)"
+        "A(KC_F15)",
+        "A(KC_F16)"
       ],
       [
-        "LALT(KC_F15)",
-        "LALT(KC_F16)"
+        "A(KC_F15)",
+        "A(KC_F16)"
       ],
       [
-        "LALT(KC_F17)",
-        "LALT(KC_F18)"
+        "A(KC_F15)",
+        "A(KC_F16)"
+      ],
+      [
+        "A(KC_F15)",
+        "A(KC_F16)"
       ]
     ],
     [
       [
-        "KC_TRNS",
-        "KC_TRNS"
+        "A(KC_F17)",
+        "A(KC_F18)"
       ],
       [
-        "KC_TRNS",
-        "KC_TRNS"
+        "A(KC_F17)",
+        "A(KC_F18)"
       ],
       [
-        "KC_TRNS",
-        "KC_TRNS"
-      ]
-    ],
-    [
-      [
-        "KC_TRNS",
-        "KC_TRNS"
+        "A(KC_F17)",
+        "A(KC_F18)"
       ],
       [
-        "KC_TRNS",
-        "KC_TRNS"
-      ],
-      [
-        "KC_TRNS",
-        "KC_TRNS"
+        "A(KC_F17)",
+        "A(KC_F18)"
       ]
     ]
   ]
