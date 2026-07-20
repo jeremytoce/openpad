@@ -42,3 +42,4 @@ Date: 2026-07-20. Sources: official Claude Code docs (code.claude.com), official
 1. Claude permission prompt: press pad approve → does `y` approve? Do digits work? What selects "don't ask again"? Update `adapters/claude.toml` if needed.
 2. Wispr: pad mic key → does dictation start? Tap-toggle or hold?
 3. If Codex installed: hooks fire (`PermissionRequest` → amber), `y`/`p`/`Esc` behave as documented.
+4. KB16-01 lighting: run `cargo run -p openpad-hid --example probe` with the pad attached → does the pad visually turn solid amber? (HID open + write already confirmed to succeed programmatically; this step confirms the firmware actually applies it.)
