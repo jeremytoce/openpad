@@ -177,3 +177,32 @@ openpad/
 2. Verify Codex CLI approval keys and `notify` config against the live TUI.
 3. Verify Wispr Flow hotkey configurability (settable/stable global hotkey we can synthesize).
 4. Confirm KB16-01 VIA RGB control granularity (per-key vs zones) over raw HID.
+
+## Revision 2 (2026-07-20, post-smoke-test): focused-window pivot
+
+Adversarial review of the multi-session case found the tmux-addressed
+steering model unsafe at n>1 sessions (last-writer-wins pane discovery can
+misdirect approvals; shared per-agent state slots let one session's DONE
+stomp another's WAITING). Approved redesign:
+
+- **Steering keys act on the focused window.** Approve/reject/interrupt/
+  prompts synthesize keystrokes into whatever terminal is frontmost. The
+  safety property becomes visual: you approve what you are looking at.
+  This also removes the tmux requirement entirely.
+- **Terminal allowlist guard:** keys synthesize only when the frontmost app
+  is in a configured terminal allowlist; otherwise the press is a no-op.
+- **LEDs unchanged and global:** amber pulse still means "some session is
+  blocked on you." LEDs summon attention; focus picks the target.
+- **Row-1 keys become goto keys:** press Claude/Codex/Kimi to focus that
+  agent's discovered pane (hooks self-announce $TMUX_PANE when in tmux).
+  Key 4 becomes **goto-waiting**: jump focus to the session that is
+  blocked. Broadcast is dropped (brand-level broadcast was near-useless);
+  mass-interrupt returns with session slots in Plan 2.
+- **Mic simplifies:** fires the Wispr hotkey into the focused window, no
+  focus jump (consistent with everything else).
+- **Prerequisite: active event tap.** Pad F-keys must be consumed
+  (rdev::grab / CGEventTap), not observed, or their escape sequences land
+  in the very window being steered. Fallback to passive listen (with the
+  leakage caveat) if grab fails.
+- tmux integration survives only opportunistically: goto keys focus
+  discovered panes when they exist.
