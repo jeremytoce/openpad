@@ -8,12 +8,13 @@ those F-key + modifier combinations back into logical pad events
 (`crates/openpad-daemon/src/input.rs`). This file is the source of truth for
 that key programming.
 
-There is no `kb16-via.json` checked into this repo yet. VIA layout export
-requires clicking through VIA's GUI with a physical pad attached, which
-isn't something that can be scripted or fabricated here. The table below
-is complete enough to build the layout by hand in about five minutes.
-Once you've built and tested it, export it (see below) and commit
-`layouts/kb16-via.json` so nobody else has to redo this step.
+`kb16-via.json` in this directory was generated from DOIO's official VIA
+definition (the-via/keyboards, 4x5 matrix: 16 keys in columns 0-3, encoder
+pushes at 0,4 / 1,4 / 2,4). Import it in VIA: Save + Load tab, Load, pick
+the file. If your VIA build rejects it (layer count or nested Ctrl+Shift
+keycodes are the two plausible reasons), fall back to assigning by hand
+from the tables below, then re-export over the file and open a PR.
+After importing, verify with `openpad listen` (checklist at the bottom).
 
 ## Prerequisites
 
