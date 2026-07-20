@@ -9,6 +9,7 @@ ask            = ""            # focuses pane; typing is the user's
 plan           = "S-Tab"       # cycles default → acceptEdits → plan (cycle, not toggle)
 compact        = "/compact\n"
 clear          = "/clear\n"
+model          = "/model\n"
 undo           = "Escape Escape"  # opens rewind menu on empty input
 
 [events]

@@ -72,7 +72,10 @@ adapter = "kimi"
 1 = "Summarize the current state of this task and what remains."
 2 = "Run the test suite and fix any failures."
 3 = "Review the last diff for bugs before I commit."
-4 = "Continue."
+4 = "Write a short dev log of what changed this session and what is next."
+5 = "What are the biggest risks in the current approach?"
+6 = "Clean up: remove dead code and tighten naming in the files you touched."
+7 = "Explain what you are doing right now and why."
 "#
 }
 

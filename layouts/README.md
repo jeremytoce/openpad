@@ -54,48 +54,49 @@ VIA exposes them as separate CCW / CW / push assignments per layer.
 
 ### Layer 0: Steer layer (default)
 
+Verbs act on the focused window; the agent profile is auto-selected from
+it (active tmux pane, else window title). Corners are blind-findable:
+top-left approve, top-right interrupt, bottom-left mic, bottom-right layer.
+
 | Key | VIA keycode | openpad action |
 |----:|-------------|-----------------|
-| 1 | `F13` | Bind pad to Claude |
-| 2 | `F14` | Bind pad to Codex |
-| 3 | `F15` | Bind pad to Kimi |
-| 4 | `F16` | Broadcast to all agents |
-| 5 | `F17` | Approve |
-| 6 | `F18` | Approve always (don't ask again) |
-| 7 | `F19` | Reject |
-| 8 | `F20` | Stop / interrupt |
-| 9 | `LSFT(F13)` | Mic (Wispr Flow push-to-talk) |
-| 10 | `LSFT(F14)` | Ask |
-| 11 | `LSFT(F15)` | Branch |
-| 12 | `LSFT(F16)` | Undo |
-| 13 | `LSFT(F17)` | Plan mode |
-| 14 | `LSFT(F18)` | Compact |
-| 15 | `LSFT(F19)` | Clear |
+| 1 | `F13` | Approve |
+| 2 | `F14` | Approve always (don't ask again) |
+| 3 | `F15` | Reject |
+| 4 | `F16` | Stop / interrupt |
+| 5 | `F17` | Goto waiting: focus the session blocked on you |
+| 6 | `F18` | Continue (types "continue" + Enter) |
+| 7 | `F19` | Undo (rewind menu) |
+| 8 | `F20` | Plan mode |
+| 9 | `LSFT(F13)` | Compact |
+| 10 | `LSFT(F14)` | Clear / new chat |
+| 11 | `LSFT(F15)` | Model picker |
+| 12 | `LSFT(F16)` | Prompt 1 |
+| 13 | `LSFT(F17)` | Mic (Wispr Flow push-to-talk) |
+| 14 | `LSFT(F18)` | Prompt 2 |
+| 15 | `LSFT(F19)` | Prompt 3 |
 | 16 | `MO(1)` | Hold: momentary Launch layer |
 
 ### Layer 1: Launch layer (held via key 16, or locked via `TG(1)`)
 
 | Key | VIA keycode | openpad action |
 |----:|-------------|-----------------|
-| 1 | `LCTL(F13)` | Bind pad to Claude |
-| 2 | `LCTL(F14)` | Bind pad to Codex |
-| 3 | `LCTL(F15)` | Bind pad to Kimi |
-| 4 | `LCTL(F16)` | Broadcast to all agents |
-| 5 | `LCTL(F17)` | `/review` |
-| 6 | `LCTL(F18)` | `/test` |
-| 7 | `LCTL(F19)` | `/commit` |
-| 8 | `LCTL(F20)` | `/pr` |
-| 9 | `LCTL(LSFT(F13))` | Prompt 1 |
-| 10 | `LCTL(LSFT(F14))` | Prompt 2 |
-| 11 | `LCTL(LSFT(F15))` | Prompt 3 |
-| 12 | `LCTL(LSFT(F16))` | Prompt 4 |
-| 13 | `LCTL(LSFT(F17))` | repo picker *(reserved, Plan 3)* |
-| 14 | `LCTL(LSFT(F18))` | worktree picker *(reserved, Plan 3)* |
-| 15 | `LCTL(LSFT(F19))` | logs viewer *(reserved, Plan 3)* |
+| 1 | `LCTL(F13)` | `/review` |
+| 2 | `LCTL(F14)` | `/test` |
+| 3 | `LCTL(F15)` | `/commit` |
+| 4 | `LCTL(F16)` | `/pr` |
+| 5 | `LCTL(F17)` | Prompt 4 |
+| 6 | `LCTL(F18)` | Prompt 5 |
+| 7 | `LCTL(F19)` | Prompt 6 |
+| 8 | `LCTL(F20)` | Prompt 7 |
+| 9 | `LCTL(LSFT(F13))` | repo picker *(reserved, Plan 3)* |
+| 10 | `LCTL(LSFT(F14))` | worktree picker *(reserved, Plan 3)* |
+| 11 | `LCTL(LSFT(F15))` | logs viewer *(reserved, Plan 3)* |
+| 12 | `LCTL(LSFT(F16))` | *(unassigned)* |
+| 13 | `LCTL(LSFT(F17))` | *(unassigned)* |
+| 14 | `LCTL(LSFT(F18))` | *(unassigned)* |
+| 15 | `LCTL(LSFT(F19))` | *(unassigned)* |
 | 16 | `TG(1)` | Toggle: lock/unlock Launch layer |
-
-Row 1 (keys 1-4) is identical on both layers on purpose: bind/broadcast
-should always be one tap away, whichever layer you're on.
 
 Key 16 is programmed as a layer key (`MO(1)` on layer 0, `TG(1)` on layer
 1), not as an F-key combo. The daemon never receives a HID event for it.
@@ -117,14 +118,11 @@ layers. Encoders aren't layer-switched.
 
 Current daemon behavior per encoder (see `crates/openpad-daemon/src/runloop.rs`):
 
-- **Encoder 1** (turn): reserved for transcript scroll, not wired up yet (Plan 2).
-- **Encoder 1** (push): reserved, not wired up yet.
-- **Encoder 2** (turn): cycles which agent is bound (wraps claude -> codex -> kimi -> claude).
-- **Encoder 2** (push): focuses the bound agent's pane. This is the one intentional
-  focus-stealing action tied to a steering key. Everything else routes to the
-  agent's tmux pane without touching window focus.
-- **Encoder 3** (turn): reserved for model-tier switching, not wired up yet (Plan 2).
-- **Encoder 3** (push): reserved, not wired up yet.
+- **Encoder 1** (turn): menu knob. Sends Up / Down arrows to the focused
+  window, so TUI dialogs (permission options, rewind menu, model picker)
+  are knob-navigable. Push sends Enter.
+- **Encoder 2**: reserved (Plan 2).
+- **Encoder 3**: reserved (Plan 2, model tier).
 
 ## Exporting (do this once you've built and tested the layout)
 

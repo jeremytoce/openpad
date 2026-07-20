@@ -99,6 +99,9 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
                         }
                     }
                     Action::Agent(name) => self.send_action_focused(&name),
+                    Action::Text(text) => {
+                        let _ = self.dispatcher.send_text(&Self::focused(), &text);
+                    }
                     Action::Mic => {
                         // fires into the focused window, like everything else
                         let _ = self.dispatcher.fire_hotkey(&self.cfg.wispr_hotkey_osascript);
@@ -113,16 +116,16 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
                     Action::Shell(_) | Action::LayerHold => { /* layer handled on-pad; shell in later plan */ }
                 }
             }
-            PhysKey::EncoderTurn(1, dir) => {
-                let n = self.cfg.agents.len();
-                self.selected = (self.selected as i64 + dir as i64).rem_euclid(n as i64) as usize;
+            PhysKey::EncoderTurn(0, dir) => {
+                // menu knob: TUI dialogs (permission options, rewind, model
+                // picker) become knob-navigable. CW = down.
+                let key = if dir > 0 { "Down" } else { "Up" };
+                let _ = self.dispatcher.send_keys(&Self::focused(), key);
             }
-            PhysKey::EncoderPush(1) => {
-                if self.cfg.agents[self.selected].tmux.is_some() {
-                    let _ = self.dispatcher.focus(&self.pane_target(self.selected));
-                }
+            PhysKey::EncoderPush(0) => {
+                let _ = self.dispatcher.send_keys(&Self::focused(), "Enter");
             }
-            _ => { /* enc 0 (scroll) and enc 2 (model tier) in later plan */ }
+            _ => { /* enc 1 and enc 2: reserved (Plan 2) */ }
         }
     }
 

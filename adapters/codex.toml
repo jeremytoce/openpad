@@ -12,6 +12,7 @@ interrupt      = "Escape"      # single Esc interrupts a running turn
 plan           = "/plan\n"
 compact        = "/compact\n"
 clear          = "/new\n"
+model          = "/model\n"
 review         = "/review\n"
 
 [events]

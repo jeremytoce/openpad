@@ -159,6 +159,8 @@ pub(crate) fn osascript_key_token_script(tok: &str) -> String {
         "Enter" | "Return" => Some(36),
         "Tab" => Some(48),
         "Space" => Some(49),
+        "Up" => Some(126),
+        "Down" => Some(125),
         _ => None,
     };
     match (code, mods.is_empty()) {
