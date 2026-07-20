@@ -43,3 +43,28 @@ Date: 2026-07-20. Sources: official Claude Code docs (code.claude.com), official
 2. Wispr: pad mic key → does dictation start? Tap-toggle or hold?
 3. If Codex installed: hooks fire (`PermissionRequest` → amber), `y`/`p`/`Esc` behave as documented.
 4. KB16-01 lighting: run `cargo run -p openpad-hid --example probe` with the pad attached → does the pad visually turn solid amber? (HID open + write already confirmed to succeed programmatically; this step confirms the firmware actually applies it.)
+
+## Task 12: VIA layout — **EMPIRICAL-PENDING**
+
+The VIA layout (`layouts/README.md`) has been fully specified as a table
+(every key/encoder → VIA keycode → openpad action), matching the physical
+encoding contract in `crates/openpad-daemon/src/input.rs` byte-for-byte.
+It has **not** been built in VIA or exported to `layouts/kb16-via.json` —
+that requires a human with the physical pad attached to VIA.app, which
+isn't something that can be scripted here. No layout JSON has been
+fabricated.
+
+Human checklist once the layout is built in VIA (~5 min to assign, per
+`layouts/README.md`):
+
+1. Build both layers and all three encoders in VIA per the tables in
+   `layouts/README.md`.
+2. Export via VIA's "Save current layout" → save as `layouts/kb16-via.json`,
+   commit it.
+3. Run `openpad listen` and tap every physical key (both layers, reached via
+   holding key 16 for layer 1) and every encoder direction/push once each.
+   Confirm each produces exactly the `PhysKey` value `layouts/README.md`
+   claims for it (e.g. key 1 on layer 0 → `Key(Steer, 0)`; encoder 2 CW →
+   `EncoderTurn(1, 1)`).
+4. Record any mismatches here and fix the VIA assignment or
+   `crates/openpad-daemon/src/input.rs` as appropriate.
