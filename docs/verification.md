@@ -28,7 +28,14 @@ Date: 2026-07-20. Sources: official Claude Code docs (code.claude.com), official
 
 ## KB16-01 raw HID / RGB granularity
 
-- Not yet probed — Task 8 Step 1 spike (needs pad attached).
+- **Probed 2026-07-20** via `cargo run -p openpad-hid --example probe` (DOIO KB16-01, VID 0xD010 / PID 0x1601, raw HID usagePage 0xFF60 usage 0x61, attached to this machine).
+- **Device open: succeeded.** `hidapi::HidApi::new()` enumerated the device; `device_list().find(...)` matched on VID/PID/usage_page 0xFF60 and `open_device()` returned an open handle with no error.
+- **Writes: both succeeded**, no error returned, with the brief's exact VIA report layout — 33-byte buffer, `report_id=0x00` at index 0, `[1]=0x07` (command `custom_set_value`), `[2]=3` (channel `id_qmk_rgb_matrix`), `[3]=value_id`, data from `[4..]`. Did not need to fall back to a 32-byte (no leading 0x00) report; the 33-byte form worked on the first try.
+  - `msg[3]=2` (effect), `msg[4]=1` → solid-color effect: write returned `Ok`.
+  - `msg[3]=4` (color), `msg[4]=28, msg[5]=255` → hue=amber/sat=max: write returned `Ok`.
+- Program exited 0 printing `sent solid amber — did the pad change color?`.
+- **Visual confirmation (did the pad's LEDs actually turn amber) is EMPIRICAL-PENDING** — deferred to the Task 10 human smoke test per the brief; a successful HID write does not by itself prove the firmware applied the lighting change.
+- **Per-key path: not probed / not expected.** VIA's `custom_set_value` lighting channel (`id_qmk_rgb_matrix`) is a global-effect API — there is no standard VIA value id for addressing an individual key's color. This confirms the brief's expected finding: **global-only** control. The implemented fallback (whole-pad color = bound agent's state, most-urgent aggregate when broadcast, `HidPad::send_frame` renders `frame[3]` to the whole pad) is the correct and only approach for this hardware over the raw HID/VIA protocol; no follow-up needed unless a vendor-specific per-key protocol is discovered later.
 
 ## Task 10 smoke-test checklist (human, ~5 min)
 
