@@ -8,7 +8,9 @@ Date: 2026-07-20. Sources: official Claude Code docs (code.claude.com), official
 - **Interrupt (documented):** single `Esc` stops the current response/tool call. Caveat: when a permission dialog is open, `Esc` closes the dialog (acts as reject) instead of interrupting.
 - **Undo (documented):** double-`Esc` on empty input opens the rewind menu (a menu, not an instant undo). Mapped as-is; selecting within the menu is on the user.
 - **Plan mode (documented):** `Shift+Tab` cycles permission modes `default → acceptEdits → plan → (custom)`. It is a cycle, not a toggle — pressing it may need multiple taps to land on plan.
-- **Hooks (documented):** stdin JSON includes `hook_event_name` with values incl. `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `StopFailure`, `SessionEnd`. `PreToolUse` carries `tool_name` + `tool_input`. `Notification` carries `notification_type` (e.g. `"permission_prompt"`) + `message`. Whether Notification also fires on idle-waiting (and is distinguishable) is underdocumented — WAITING is keyed to Notification generally for now.
+- **Hooks (documented):** stdin JSON includes `hook_event_name` with values incl. `SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Stop`, `StopFailure`, `SessionEnd`. `PreToolUse` carries `tool_name` + `tool_input`. `Notification` carries `notification_type` (e.g. `"permission_prompt"`) + `message`.
+- **VERIFIED LIVE 2026-07-20 (smoke test):** in a plain `claude` TUI session (tmux), `Notification` fires when the permission prompt opens and the pad pulses amber correctly. **Caveat:** in embedded/harness Claude Code sessions (e.g. IDE-attached sessions), `Notification` does NOT fire for permission prompts (instrumented with a tee dump: `PreToolUse` fired, `Notification` never did). The WAITING light is therefore only accurate for TUI sessions, which are openpad's target environment. Known limitation, documented in README territory for Plan 2.
+- **Known issue for Plan 2 (session slot pollution):** every Claude session on the machine posts to the same `agent=claude` slot; a second session (e.g. an IDE session) stomps the tmux session's state. Fix direction: filter by `cwd` or `session_id` from the hook payload, or per-session agent naming.
 - Added mappings: `PostToolUseFailure → ERROR`, `StopFailure → ERROR`, `SessionEnd → IDLE`.
 
 ## Codex CLI
@@ -39,10 +41,10 @@ Date: 2026-07-20. Sources: official Claude Code docs (code.claude.com), official
 
 ## Task 10 smoke-test checklist (human, ~5 min)
 
-1. Claude permission prompt: press pad approve → does `y` approve? Do digits work? What selects "don't ask again"? Update `adapters/claude.toml` if needed.
-2. Wispr: pad mic key → does dictation start? Tap-toggle or hold?
-3. If Codex installed: hooks fire (`PermissionRequest` → amber), `y`/`p`/`Esc` behave as documented.
-4. KB16-01 lighting: run `cargo run -p openpad-hid --example probe` with the pad attached → does the pad visually turn solid amber? (HID open + write already confirmed to succeed programmatically; this step confirms the firmware actually applies it.)
+1. Claude permission prompt: press pad approve → does `y` approve? Do digits work? What selects "don't ask again"? Update `adapters/claude.toml` if needed. **STILL PENDING** (approve keystroke not yet reported).
+2. Wispr: pad mic key → does dictation start? Tap-toggle or hold? **STILL PENDING.**
+3. If Codex installed: hooks fire (`PermissionRequest` → amber), `y`/`p`/`Esc` behave as documented. **PENDING** (Codex not installed).
+4. ~~KB16-01 lighting~~ **CONFIRMED 2026-07-20:** pad visually pulses amber on WAITING (observed live during smoke test, both via synthetic ingest event and a real TUI permission prompt) and blinks green on DONE. Firmware applies VIA global-color writes; brightness-driven pulse renders correctly. End-to-end state pipeline (hook → shim → ingest → state machine → HID) verified working.
 
 ## Task 12: VIA layout — **EMPIRICAL-PENDING**
 
