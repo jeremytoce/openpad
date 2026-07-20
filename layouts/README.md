@@ -17,6 +17,12 @@ Once you've built and tested it, export it (see below) and commit
 
 ## Prerequisites
 
+- **Quit the openpad daemon first** (`pkill -f "openpad run"`). The daemon
+  holds the pad's raw HID interface exclusively for RGB control, and VIA
+  needs that same interface. If VIA shows "NotAllowedError: Failed to open
+  the device" or "Received invalid protocol version from device", openpad
+  is still running; stop it and, if needed, unplug and replug the pad so
+  VIA re-enumerates it. Restart `openpad run` when you're done in VIA.
 - A DOIO KB16-01 plugged into a direct USB port (not through a hub).
 - [VIA](https://www.caniusevia.com/) desktop app, with the KB16-01's VIA
   definition loaded (VIA ships with common definitions; if the pad doesn't
