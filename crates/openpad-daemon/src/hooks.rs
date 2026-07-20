@@ -25,9 +25,18 @@ fn openpad_command(entry: &Value) -> Option<&str> {
         .filter(|c| c.contains("openpad"))
 }
 
-pub fn install_claude_hooks(settings_json: &str, shim_path: &str) -> Result<String, String> {
+/// `env_prefix` is prepended verbatim to the shim invocation (e.g.
+/// `"OPENPAD_INGEST=http://127.0.0.1:9000 "`, including trailing space) when
+/// the configured ingest address differs from the default, so the installed
+/// hook command still reaches the right ingest server. Pass `""` to install
+/// the plain `bash "<shim_path>"` command.
+pub fn install_claude_hooks(
+    settings_json: &str,
+    shim_path: &str,
+    env_prefix: &str,
+) -> Result<String, String> {
     let mut v: Value = serde_json::from_str(settings_json).map_err(|e| e.to_string())?;
-    let target_command = format!("bash \"{}\"", shim_path);
+    let target_command = format!("{env_prefix}bash \"{shim_path}\"");
     let hooks = v
         .as_object_mut()
         .ok_or("settings root must be an object")?
@@ -105,7 +114,8 @@ mod tests {
 
     #[test]
     fn uninstall_removes_only_openpad_entries() {
-        let installed = install_claude_hooks(EXISTING, "/usr/local/share/openpad/claude-hook.sh").unwrap();
+        let installed =
+            install_claude_hooks(EXISTING, "/usr/local/share/openpad/claude-hook.sh", "").unwrap();
         let removed = uninstall_claude_hooks(&installed).unwrap();
         let orig: serde_json::Value = serde_json::from_str(EXISTING).unwrap();
         let out: serde_json::Value = serde_json::from_str(&removed).unwrap();
@@ -114,8 +124,8 @@ mod tests {
 
     #[test]
     fn install_preserves_existing_hooks_and_is_idempotent() {
-        let once = install_claude_hooks(EXISTING, "/x/openpad/claude-hook.sh").unwrap();
-        let twice = install_claude_hooks(&once, "/x/openpad/claude-hook.sh").unwrap();
+        let once = install_claude_hooks(EXISTING, "/x/openpad/claude-hook.sh", "").unwrap();
+        let twice = install_claude_hooks(&once, "/x/openpad/claude-hook.sh", "").unwrap();
         assert_eq!(once, twice);
         let v: serde_json::Value = serde_json::from_str(&once).unwrap();
         let ss = &v["hooks"]["SessionStart"];
@@ -140,8 +150,8 @@ mod tests {
 
     #[test]
     fn install_refreshes_stale_shim_path() {
-        let once = install_claude_hooks(EXISTING, "/old/openpad/claude-hook.sh").unwrap();
-        let refreshed = install_claude_hooks(&once, "/new/openpad/claude-hook.sh").unwrap();
+        let once = install_claude_hooks(EXISTING, "/old/openpad/claude-hook.sh", "").unwrap();
+        let refreshed = install_claude_hooks(&once, "/new/openpad/claude-hook.sh", "").unwrap();
         let v: serde_json::Value = serde_json::from_str(&refreshed).unwrap();
         for ev in EVENTS {
             let arr = v["hooks"][*ev]
@@ -161,7 +171,50 @@ mod tests {
             assert!(!s.contains("/old/"), "event {ev} should not reference /old/");
         }
 
-        let twice = install_claude_hooks(&refreshed, "/new/openpad/claude-hook.sh").unwrap();
+        let twice = install_claude_hooks(&refreshed, "/new/openpad/claude-hook.sh", "").unwrap();
         assert_eq!(refreshed, twice, "idempotency must hold once refreshed to /new/");
+    }
+
+    /// A changed `env_prefix` (e.g. the ingest address moving away from the
+    /// default) must be treated the same as a changed shim path: the stale
+    /// openpad entry is replaced, not duplicated, and re-running with the
+    /// new prefix is idempotent.
+    #[test]
+    fn install_refreshes_stale_env_prefix() {
+        let once = install_claude_hooks(EXISTING, "/x/openpad/claude-hook.sh", "").unwrap();
+        let refreshed = install_claude_hooks(
+            &once,
+            "/x/openpad/claude-hook.sh",
+            "OPENPAD_INGEST=http://127.0.0.1:9000 ",
+        )
+        .unwrap();
+        let v: serde_json::Value = serde_json::from_str(&refreshed).unwrap();
+        for ev in EVENTS {
+            let arr = v["hooks"][*ev]
+                .as_array()
+                .unwrap_or_else(|| panic!("missing array for {ev}"));
+            let openpad_entries: Vec<_> = arr
+                .iter()
+                .filter(|e| e.to_string().contains("openpad"))
+                .collect();
+            assert_eq!(
+                openpad_entries.len(),
+                1,
+                "event {ev} should have exactly one openpad entry"
+            );
+            let s = openpad_entries[0].to_string();
+            assert!(
+                s.contains("OPENPAD_INGEST=http://127.0.0.1:9000"),
+                "event {ev} should carry the new env prefix"
+            );
+        }
+
+        let twice = install_claude_hooks(
+            &refreshed,
+            "/x/openpad/claude-hook.sh",
+            "OPENPAD_INGEST=http://127.0.0.1:9000 ",
+        )
+        .unwrap();
+        assert_eq!(refreshed, twice, "idempotency must hold once refreshed to the new prefix");
     }
 }

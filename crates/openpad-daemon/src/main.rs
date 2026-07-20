@@ -51,8 +51,10 @@ fn doctor_cmd() {
     // Check if tmux is reachable
     let tmux_ok = check_tmux();
 
-    // Check if ingest port is free
-    let port_free = check_ingest_port();
+    // Check if ingest port is free, honoring the configured ingest_addr
+    // (falls back to the default 127.0.0.1:7676 when no config file exists).
+    let cfg = load_config_soft();
+    let port_free = check_ingest_port(&cfg.ingest_addr);
 
     // Read settings.json
     let settings_json = read_settings_json();
@@ -96,20 +98,21 @@ fn check_tmux() -> bool {
     }
 }
 
-/// Tri-state port-health check for `doctor`'s ingest-port row:
+/// Tri-state port-health check for `doctor`'s ingest-port row, against
+/// whatever address the config (or the default) says openpad listens on:
 ///   1. Bind succeeds -> the port is free (no daemon running) -> healthy.
 ///   2. Bind fails, but a probe of the holder looks like our own ingest
 ///      server (see `doctor::port_holder_is_openpad`) -> the openpad daemon
 ///      itself owns the port, which is the healthy steady-state -> healthy.
 ///   3. Bind fails and the holder doesn't answer like openpad -> some other
-///      process owns 127.0.0.1:7676 -> unhealthy.
+///      process owns the address -> unhealthy.
 /// Without step 2, running `openpad doctor` while the daemon is up (the
 /// common case!) would always fail the ingest-port check, a false negative.
-fn check_ingest_port() -> bool {
-    if TcpListener::bind("127.0.0.1:7676").is_ok() {
+fn check_ingest_port(addr: &str) -> bool {
+    if TcpListener::bind(addr).is_ok() {
         true
     } else {
-        doctor::port_holder_is_openpad("127.0.0.1:7676")
+        doctor::port_holder_is_openpad(addr)
     }
 }
 
@@ -141,6 +144,43 @@ fn load_or_init_config() -> config::Config {
         eprintln!("openpad: failed to load {}: {e}", path.display());
         std::process::exit(1);
     })
+}
+
+/// Default `ingest_addr`, matching `config::default_toml()`. Used to decide
+/// whether `hooks install`/`doctor` need to plumb a non-default address
+/// through to the installed hook command / port checks.
+const DEFAULT_INGEST_ADDR: &str = "127.0.0.1:7676";
+
+/// Read-only config load for commands (`hooks install`, `doctor`) that only
+/// need `ingest_addr` and must never have the side effect of writing a
+/// config file to disk (unlike `load_or_init_config`, used by `run`).
+/// Falls back to the embedded default config when no config file exists yet,
+/// or when the existing one fails to parse.
+fn load_config_soft() -> config::Config {
+    let path = config_path();
+    if path.exists() {
+        config::load(&path).unwrap_or_else(|e| {
+            eprintln!(
+                "openpad: warning: failed to load {} ({e}); using default ingest address",
+                path.display()
+            );
+            config::parse(config::default_toml()).expect("embedded default config must parse")
+        })
+    } else {
+        config::parse(config::default_toml()).expect("embedded default config must parse")
+    }
+}
+
+/// The `OPENPAD_INGEST=... ` prefix to prepend to an installed hook command
+/// when the configured ingest address differs from the default, so shims
+/// (which default to `127.0.0.1:7676`) reach the right server. Empty string
+/// when the address is the default, so the installed command is unchanged.
+fn ingest_env_prefix(addr: &str) -> String {
+    if addr == DEFAULT_INGEST_ADDR {
+        String::new()
+    } else {
+        format!("OPENPAD_INGEST=http://{addr} ")
+    }
 }
 
 /// Adapter TOML shipped with openpad, embedded at compile time.
@@ -298,8 +338,24 @@ fn install_shims() -> PathBuf {
     claude_shim
 }
 
+/// Hook events wired into the Codex `[hooks]` snippet printed by
+/// `hooks_install`. Mirrors the events our Claude shim already forwards,
+/// restricted to the ones `adapters/codex.toml` maps to a state (plus the
+/// lifecycle events Claude's own install list covers).
+const CODEX_HOOK_EVENTS: &[&str] = &[
+    "SessionStart",
+    "UserPromptSubmit",
+    "PreToolUse",
+    "PermissionRequest",
+    "PostToolUse",
+    "SubagentStop",
+    "Stop",
+];
+
 fn hooks_install() {
     let claude_shim = install_shims();
+    let cfg = load_config_soft();
+    let env_prefix = ingest_env_prefix(&cfg.ingest_addr);
 
     let settings_path = claude_settings_path();
     let existing = std::fs::read_to_string(&settings_path).unwrap_or_else(|_| "{}".to_string());
@@ -314,11 +370,15 @@ fn hooks_install() {
         );
     }
 
-    let updated = install_claude_hooks(&existing, claude_shim.to_str().expect("utf8 path"))
-        .unwrap_or_else(|e| {
-            eprintln!("openpad: failed to install hooks: {e}");
-            std::process::exit(1);
-        });
+    let updated = install_claude_hooks(
+        &existing,
+        claude_shim.to_str().expect("utf8 path"),
+        &env_prefix,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("openpad: failed to install hooks: {e}");
+        std::process::exit(1);
+    });
 
     if let Some(dir) = settings_path.parent() {
         std::fs::create_dir_all(dir)
@@ -331,10 +391,30 @@ fn hooks_install() {
         settings_path.display()
     );
 
+    // Codex has no additive hooks API openpad can write to automatically, so
+    // we print two copy-pasteable options for ~/.codex/config.toml instead
+    // of editing it. We deliberately do NOT edit ~/.codex automatically.
     let codex_shim = shim_install_dir().join("codex-notify.sh");
+    let claude_shim_str = claude_shim.display();
     println!();
-    println!("Codex has no additive hooks API for `notify`; add this manually to ~/.codex/config.toml:");
+    println!("Codex fallback (notify, done-only): fires only on turn completion");
+    println!("(DONE/ERROR); no WAITING signal while a permission prompt is open.");
+    println!("Add this to ~/.codex/config.toml:");
     println!("  notify = [\"bash\", \"{}\"]", codex_shim.display());
+    println!();
+    println!("Codex full fidelity (hooks, recommended): Codex's own hooks system");
+    println!("(stdin JSON with hook_event_name, via [hooks] in ~/.codex/config.toml or");
+    println!("hooks.json) maps PermissionRequest/PreToolUse/Stop etc. to accurate");
+    println!("WAITING/RUNNING/DONE states, the same as Claude. Paste this into");
+    println!("~/.codex/config.toml for full fidelity (we deliberately do NOT edit");
+    println!("~/.codex automatically):");
+    println!();
+    println!("  [hooks]");
+    for ev in CODEX_HOOK_EVENTS {
+        println!(
+            "  {ev:<17} = \"{env_prefix}OPENPAD_AGENT=codex bash \\\"{claude_shim_str}\\\"\""
+        );
+    }
 }
 
 fn hooks_uninstall() {

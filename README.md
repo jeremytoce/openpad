@@ -69,12 +69,28 @@ See `layouts/README.md` for the full key table and import/export steps.
 openpad hooks install
 ```
 
-This installs openpad's hooks additively into `~/.claude/settings.json`
-(backing up the existing file first) and drops shim scripts under
+`openpad hooks install` wires Claude Code automatically: it installs
+openpad's hooks additively into `~/.claude/settings.json` (backing up the
+existing file first) and drops shim scripts under
 `~/.local/share/openpad/`. It never removes or overwrites hooks you
-already have configured for other tools. Codex CLI has no additive hooks
-API yet, so `hooks install` prints the one line to add by hand to
-`~/.codex/config.toml`.
+already have configured for other tools.
+
+Codex CLI has no additive hooks API openpad can write to for you, so
+`hooks install` prints two ready-to-paste snippets for
+`~/.codex/config.toml` instead of editing it:
+
+- **Codex fallback (notify, done-only)**: a `notify` line. It only fires
+  on turn completion, so you get DONE/ERROR but no WAITING signal.
+- **Codex full fidelity (hooks, recommended)**: a `[hooks]` block that
+  routes Codex's own hooks (`SessionStart`, `UserPromptSubmit`,
+  `PreToolUse`, `PermissionRequest`, `PostToolUse`, `SubagentStop`,
+  `Stop`) through the same shim used for Claude (with `OPENPAD_AGENT=codex`
+  set), giving Codex the same accurate WAITING/RUNNING/DONE tracking
+  Claude gets.
+
+Full fidelity requires pasting the hooks snippet; the notify line alone
+only gives you done-only fidelity. We deliberately don't edit
+`~/.codex/config.toml` for you, since it isn't ours to own.
 
 ### 4. Start your agent sessions in tmux
 
@@ -146,11 +162,14 @@ attention.
   `PostToolUse`, `Notification`, `Stop`, etc.) gives openpad an accurate
   read on every state transition, including WAITING when a permission
   prompt is open.
-- **Codex CLI**: full fidelity. Codex ships its own hooks system, and its
-  `PermissionRequest` hook maps directly to an accurate WAITING light.
-  The same fidelity as Claude. Older Codex versions without the hooks
-  system fall back to the argv-based `notify` callback, which only fires
-  on turn completion (no WAITING signal, but still gets you DONE/ERROR).
+- **Codex CLI**: full fidelity once you paste the `[hooks]` snippet that
+  `openpad hooks install` prints (see step 3). Codex ships its own hooks
+  system, and its `PermissionRequest` hook maps directly to an accurate
+  WAITING light, the same fidelity as Claude. If you only add the
+  `notify` line instead (or you're on an older Codex without the hooks
+  system), you fall back to done-only: the argv-based `notify` callback
+  only fires on turn completion, so you still get DONE/ERROR but no
+  WAITING signal.
 - **Kimi**: stub adapter with degraded fidelity (a few key bindings, no
   event mapping yet, so it always shows IDLE). Contributions welcome; see
   `adapters/kimi.toml` and the other two adapters as a template.

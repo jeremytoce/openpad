@@ -2,7 +2,6 @@ use openpad_daemon::runloop::Engine;
 use openpad_daemon::input::PhysKey;
 use openpad_daemon::ingest::IngestEvent;
 use openpad_core::keymap::Layer;
-use openpad_core::state::AgentState;
 use openpad_dispatch::FakeDispatcher;
 use openpad_hid::FakePad;
 
