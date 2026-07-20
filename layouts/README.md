@@ -121,7 +121,9 @@ Current daemon behavior per encoder (see `crates/openpad-daemon/src/runloop.rs`)
 - **Encoder 1** (turn): menu knob. Sends Up / Down arrows to the focused
   window, so TUI dialogs (permission options, rewind menu, model picker)
   are knob-navigable. Push sends Enter.
-- **Encoder 2**: reserved (Plan 2).
+- **Encoder 2** (push): toggles the Launch layer in software — click once
+  for Launch, click again for Steer. Works alongside the firmware layer
+  key (16); no VIA change needed. Turn: reserved (Plan 2).
 - **Encoder 3**: reserved (Plan 2, model tier).
 
 ## Exporting (do this once you've built and tested the layout)

@@ -10,6 +10,7 @@ plan           = "S-Tab"       # cycles default → acceptEdits → plan (cycle,
 compact        = "/compact\n"
 clear          = "/clear\n"
 model          = "/model\n"
+review         = "/review\n"
 undo           = "Escape Escape"  # opens rewind menu on empty input
 
 [events]

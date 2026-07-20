@@ -9,6 +9,7 @@ pub struct Engine<D: Dispatcher, P: PadLink> {
     keymap: Keymap,
     sm: StateMachine,
     selected: usize, // encoder-selected agent for goto (dispatch never uses it)
+    layer_lock: bool, // software Launch-layer lock, toggled by encoder 2 push
     dispatcher: D,
     pad: P,
 }
@@ -17,7 +18,7 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
     pub fn new(cfg: Config, adapters: Vec<Adapter>, dispatcher: D, pad: P) -> Self {
         let names: Vec<&str> = cfg.agents.iter().map(|a| a.name.as_str()).collect();
         let sm = StateMachine::new(&names);
-        Engine { cfg, adapters, keymap: Keymap::default_map(), sm, selected: 0, dispatcher, pad }
+        Engine { cfg, adapters, keymap: Keymap::default_map(), sm, selected: 0, layer_lock: false, dispatcher, pad }
     }
 
     /// Steering always acts on the focused window. The safety property is
@@ -70,6 +71,10 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
     pub fn on_key(&mut self, k: PhysKey) {
         match k {
             PhysKey::Key(layer, key) => {
+                // software layer lock: knob-toggled Launch without touching
+                // firmware. Firmware-layer (held key 16) events arrive as
+                // Launch already and are unaffected.
+                let layer = if self.layer_lock { openpad_core::keymap::Layer::Launch } else { layer };
                 let Some(action) = self.keymap.action(layer, key).cloned() else { return };
                 match action {
                     Action::Goto(name) => {
@@ -125,7 +130,10 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
             PhysKey::EncoderPush(0) => {
                 let _ = self.dispatcher.send_keys(&Self::focused(), "Enter");
             }
-            _ => { /* enc 1 and enc 2: reserved (Plan 2) */ }
+            PhysKey::EncoderPush(1) => {
+                self.layer_lock = !self.layer_lock;
+            }
+            _ => { /* enc 2 and remaining encoder turns: reserved (Plan 2) */ }
         }
     }
 

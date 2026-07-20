@@ -163,3 +163,17 @@ fn encoder1_is_a_menu_knob() {
     let calls = e.dispatcher().calls.lock().unwrap().clone();
     assert_eq!(calls, ["send focused Down", "send focused Up", "send focused Enter"]);
 }
+
+#[test]
+fn encoder2_push_toggles_launch_layer() {
+    let mut e = engine();
+    e.on_key(PhysKey::EncoderPush(1)); // lock Launch
+    e.on_key(PhysKey::Key(Layer::Steer, 0)); // physical key 1 → /review, not approve
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.iter().any(|c| c == "send focused /review Enter" || c.starts_with("send focused /review")),
+        "locked layer must run Launch actions: {calls:?}");
+    e.on_key(PhysKey::EncoderPush(1)); // unlock
+    e.on_key(PhysKey::Key(Layer::Steer, 0)); // approve again
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.iter().any(|c| c == "send focused y"), "unlock must restore Steer: {calls:?}");
+}
