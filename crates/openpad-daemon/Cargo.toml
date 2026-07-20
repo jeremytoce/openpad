@@ -9,10 +9,12 @@ path = "src/main.rs"
 
 [dependencies]
 openpad-core = { path = "../openpad-core" }
+openpad-dispatch = { path = "../openpad-dispatch" }
 tiny_http = "0.12"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
+rdev = "0.5"
 
 [dev-dependencies]
 ureq = "2"

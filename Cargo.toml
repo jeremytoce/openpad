@@ -1,3 +1,3 @@
 [workspace]
 resolver = "2"
-members = ["crates/openpad-core", "crates/openpad-daemon", "crates/openpad-hid"]
+members = ["crates/openpad-core", "crates/openpad-daemon", "crates/openpad-dispatch", "crates/openpad-hid"]
