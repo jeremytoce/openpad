@@ -71,3 +71,16 @@ fn empty_action_is_noop() {
     let after = e.dispatcher().calls.lock().unwrap().len();
     assert_eq!(before, after, "empty-string adapter action must be a complete no-op");
 }
+
+#[test]
+fn prompt_uses_literal_text_path() {
+    let mut e = openpad_daemon::runloop::Engine::test_fixture();
+    e.on_key(openpad_daemon::input::PhysKey::Key(openpad_core::keymap::Layer::Steer, 0)); // bind claude
+    e.on_key(openpad_daemon::input::PhysKey::Key(openpad_core::keymap::Layer::Launch, 8)); // Prompt 1
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    let text_call = calls.iter().find(|c| c.starts_with("text claude:0 "));
+    assert!(text_call.is_some(), "prompt must go through send_text, got: {calls:?}");
+    assert!(text_call.unwrap().contains(' '), "prompt text keeps its spaces");
+    assert!(!calls.iter().any(|c| c.starts_with("send claude:0 Summarize")),
+        "prompt must not go through the key-token path");
+}

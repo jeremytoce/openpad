@@ -67,8 +67,9 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
                     }
                     Action::Prompt(n) => {
                         if let Some(text) = self.cfg.prompts.get(&n) {
+                            // literal-text path: spaces must not be parsed as key names
                             let msg = format!("{text}\n");
-                            let _ = self.dispatcher.send_keys(&self.target(self.bound), &msg);
+                            let _ = self.dispatcher.send_text(&self.target(self.bound), &msg);
                         }
                     }
                     Action::Shell(_) | Action::LayerHold => { /* layer handled on-pad; shell in later plan */ }
