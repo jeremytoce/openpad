@@ -422,6 +422,7 @@ dependencies = [
 name = "openpad-daemon"
 version = "0.1.0"
 dependencies = [
+ "hidapi",
  "openpad-core",
  "openpad-daemon",
  "openpad-dispatch",

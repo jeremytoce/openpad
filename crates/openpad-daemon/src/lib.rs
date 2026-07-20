@@ -1,4 +1,5 @@
 pub mod config;
+pub mod doctor;
 pub mod hooks;
 pub mod ingest;
 pub mod input;

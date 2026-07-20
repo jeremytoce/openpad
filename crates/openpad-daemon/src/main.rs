@@ -1,12 +1,14 @@
 use openpad_core::adapter::{parse_adapter, Adapter};
 use openpad_core::led::Rgb;
 use openpad_daemon::config;
+use openpad_daemon::doctor;
 use openpad_daemon::hooks::{install_claude_hooks, uninstall_claude_hooks};
 use openpad_daemon::ingest::{spawn_ingest, IngestEvent};
 use openpad_daemon::input::{spawn_listener, PhysKey};
 use openpad_daemon::runloop::Engine;
 use openpad_dispatch::MacDispatcher;
-use openpad_hid::{HidPad, PadLink};
+use openpad_hid::{HidPad, PadLink, VID, PID};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
@@ -17,10 +19,7 @@ fn main() {
         Some("run") => run(),
         Some("listen") => listen(),
         Some("hooks") => hooks(args.next().as_deref()),
-        Some("doctor") => {
-            eprintln!("openpad: doctor is not implemented yet");
-            std::process::exit(1);
-        }
+        Some("doctor") => doctor_cmd(),
         _ => usage(),
     }
 }
@@ -33,7 +32,7 @@ fn usage() {
     println!("  listen           debug: print PhysKey events from the pad as they arrive");
     println!("  hooks install    install openpad's Claude Code hooks into ~/.claude/settings.json");
     println!("  hooks uninstall  remove openpad's hooks from ~/.claude/settings.json");
-    println!("  doctor           check pad/tmux/hooks/port health (not yet implemented)");
+    println!("  doctor           check pad/tmux/hooks/port health");
 }
 
 fn listen() {
@@ -43,6 +42,67 @@ fn listen() {
     for event in rx {
         println!("{event:?}");
     }
+}
+
+fn doctor_cmd() {
+    // Check if HID device is present
+    let hid_present = check_hid_device();
+
+    // Check if tmux is reachable
+    let tmux_ok = check_tmux();
+
+    // Check if ingest port is free
+    let port_free = check_ingest_port();
+
+    // Read settings.json
+    let settings_json = read_settings_json();
+
+    // Run checks
+    let checks = doctor::run_checks(settings_json.as_deref(), hid_present, tmux_ok, port_free);
+
+    // Print results
+    let mut all_ok = true;
+    for check in checks {
+        let symbol = if check.ok { "✓" } else { "✗" };
+        println!("{} {}", symbol, check.name);
+        if !check.ok {
+            println!("  {}", check.hint);
+            all_ok = false;
+        }
+    }
+
+    // Exit with status
+    if !all_ok {
+        std::process::exit(1);
+    }
+}
+
+fn check_hid_device() -> bool {
+    if let Ok(api) = hidapi::HidApi::new() {
+        api.device_list()
+            .any(|d| d.vendor_id() == VID && d.product_id() == PID && d.usage_page() == 0xFF60)
+    } else {
+        false
+    }
+}
+
+fn check_tmux() -> bool {
+    match std::process::Command::new("tmux")
+        .arg("has-session")
+        .output()
+    {
+        Ok(output) => output.status.success(),
+        Err(_) => false,
+    }
+}
+
+fn check_ingest_port() -> bool {
+    TcpListener::bind("127.0.0.1:7676").is_ok()
+}
+
+fn read_settings_json() -> Option<String> {
+    let settings_path = claude_settings_path();
+    std::fs::read_to_string(&settings_path).ok()
 }
 
 // ---------------------------------------------------------------------------
