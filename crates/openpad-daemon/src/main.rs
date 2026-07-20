@@ -96,8 +96,21 @@ fn check_tmux() -> bool {
     }
 }
 
+/// Tri-state port-health check for `doctor`'s ingest-port row:
+///   1. Bind succeeds -> the port is free (no daemon running) -> healthy.
+///   2. Bind fails, but a probe of the holder looks like our own ingest
+///      server (see `doctor::port_holder_is_openpad`) -> the openpad daemon
+///      itself owns the port, which is the healthy steady-state -> healthy.
+///   3. Bind fails and the holder doesn't answer like openpad -> some other
+///      process owns 127.0.0.1:7676 -> unhealthy.
+/// Without step 2, running `openpad doctor` while the daemon is up (the
+/// common case!) would always fail the ingest-port check, a false negative.
 fn check_ingest_port() -> bool {
-    TcpListener::bind("127.0.0.1:7676").is_ok()
+    if TcpListener::bind("127.0.0.1:7676").is_ok() {
+        true
+    } else {
+        doctor::port_holder_is_openpad("127.0.0.1:7676")
+    }
 }
 
 fn read_settings_json() -> Option<String> {
