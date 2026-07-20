@@ -54,10 +54,6 @@ fn parse_param(query: &str, want: &str) -> Option<String> {
     })
 }
 
-fn parse_agent_param(query: &str) -> Option<String> {
-    parse_param(query, "agent")
-}
-
 pub fn spawn_ingest(addr: &str, tx: Sender<IngestEvent>) -> std::io::Result<std::thread::JoinHandle<()>> {
     let server = tiny_http::Server::http(addr)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::AddrInUse, e.to_string()))?;
@@ -72,7 +68,7 @@ pub fn spawn_ingest(addr: &str, tx: Sender<IngestEvent>) -> std::io::Result<std:
                 let _ = req.respond(tiny_http::Response::empty(404));
                 continue;
             }
-            let agent = parse_agent_param(query).unwrap_or_default();
+            let agent = parse_param(query, "agent").unwrap_or_default();
             let mut body = String::new();
             let _ = std::io::Read::read_to_string(&mut req.as_reader(), &mut body);
             let v: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();

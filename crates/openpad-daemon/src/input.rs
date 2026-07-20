@@ -38,72 +38,59 @@ pub fn map_key(mods: Mods, code: u32) -> Option<PhysKey> {
     Some(PhysKey::Key(layer, key))
 }
 
+/// Classify one input event: update modifier state, and if it's a mapped
+/// pad key, emit the PhysKey (on press) and report it as swallowable.
+/// Shared by the grab (consuming) and listen (passive fallback) paths.
+fn classify(ev: &rdev::EventType, mods: &mut Mods, tx: &Sender<PhysKey>) -> bool {
+    use rdev::{EventType, Key};
+    match ev {
+        EventType::KeyPress(Key::ShiftLeft | Key::ShiftRight) => mods.shift = true,
+        EventType::KeyRelease(Key::ShiftLeft | Key::ShiftRight) => mods.shift = false,
+        EventType::KeyPress(Key::ControlLeft | Key::ControlRight) => mods.ctrl = true,
+        EventType::KeyRelease(Key::ControlLeft | Key::ControlRight) => mods.ctrl = false,
+        EventType::KeyPress(Key::Alt | Key::AltGr) => mods.alt = true,
+        EventType::KeyRelease(Key::Alt | Key::AltGr) => mods.alt = false,
+        EventType::KeyPress(k) => {
+            if let Some(pk) = rdev_code(*k).and_then(|c| map_key(*mods, c)) {
+                let _ = tx.send(pk);
+                return true; // swallow: pad key handled
+            }
+        }
+        EventType::KeyRelease(k) => {
+            // swallow the matching key-up of consumed pad keys
+            if rdev_code(*k).and_then(|c| map_key(*mods, c)).is_some() {
+                return true;
+            }
+        }
+        _ => {}
+    }
+    false
+}
+
 pub fn spawn_listener(tx: Sender<PhysKey>) {
     std::thread::spawn(move || {
         let mods = std::sync::Arc::new(std::sync::Mutex::new(Mods { shift: false, ctrl: false, alt: false }));
 
         // Primary: active grab (CGEventTap). Mapped pad keys are CONSUMED so
-        // their F-key escape sequences never reach the focused terminal —
-        // a prerequisite of the focused-window steering model. Everything
-        // else (all modifiers, all normal typing) passes through untouched.
+        // their F-key escape sequences never reach the focused terminal, a
+        // prerequisite of the focused-window steering model.
         let m = mods.clone();
         let tx_grab = tx.clone();
         let grab_result = rdev::grab(move |ev| {
-            use rdev::{EventType, Key};
-            let mut mods = m.lock().unwrap();
-            match ev.event_type {
-                EventType::KeyPress(Key::ShiftLeft | Key::ShiftRight) => mods.shift = true,
-                EventType::KeyRelease(Key::ShiftLeft | Key::ShiftRight) => mods.shift = false,
-                EventType::KeyPress(Key::ControlLeft | Key::ControlRight) => mods.ctrl = true,
-                EventType::KeyRelease(Key::ControlLeft | Key::ControlRight) => mods.ctrl = false,
-                EventType::KeyPress(Key::Alt | Key::AltGr) => mods.alt = true,
-                EventType::KeyRelease(Key::Alt | Key::AltGr) => mods.alt = false,
-                EventType::KeyPress(k) => {
-                    if let Some(code) = rdev_code(k) {
-                        if let Some(pk) = map_key(*mods, code) {
-                            let _ = tx_grab.send(pk);
-                            return None; // swallow the pad key
-                        }
-                    }
-                }
-                EventType::KeyRelease(k) => {
-                    // swallow the matching key-up of consumed pad keys
-                    if let Some(code) = rdev_code(k) {
-                        if map_key(*mods, code).is_some() {
-                            return None;
-                        }
-                    }
-                }
-                _ => {}
+            if classify(&ev.event_type, &mut m.lock().unwrap(), &tx_grab) {
+                None
+            } else {
+                Some(ev)
             }
-            Some(ev)
         });
 
         // Fallback: passive listen (pad works, but F-key sequences leak into
         // focused terminals). Happens when grab is denied (Accessibility /
         // Input Monitoring not granted to this binary).
         if grab_result.is_err() {
-            eprintln!("openpad: event grab unavailable (grant Accessibility + Input Monitoring); falling back to passive listen — pad keys will leak escape codes into focused terminals");
-            let m = mods;
+            eprintln!("openpad: event grab unavailable (grant Accessibility + Input Monitoring); falling back to passive listen; pad keys will leak escape codes into focused terminals");
             let _ = rdev::listen(move |ev| {
-                use rdev::{EventType, Key};
-                let mut mods = m.lock().unwrap();
-                match ev.event_type {
-                    EventType::KeyPress(Key::ShiftLeft | Key::ShiftRight) => mods.shift = true,
-                    EventType::KeyRelease(Key::ShiftLeft | Key::ShiftRight) => mods.shift = false,
-                    EventType::KeyPress(Key::ControlLeft | Key::ControlRight) => mods.ctrl = true,
-                    EventType::KeyRelease(Key::ControlLeft | Key::ControlRight) => mods.ctrl = false,
-                    EventType::KeyPress(Key::Alt | Key::AltGr) => mods.alt = true,
-                    EventType::KeyRelease(Key::Alt | Key::AltGr) => mods.alt = false,
-                    EventType::KeyPress(k) => {
-                        if let Some(code) = rdev_code(k) {
-                            if let Some(pk) = map_key(*mods, code) {
-                                let _ = tx.send(pk);
-                            }
-                        }
-                    }
-                    _ => {}
-                }
+                classify(&ev.event_type, &mut mods.lock().unwrap(), &tx);
             });
         }
     });

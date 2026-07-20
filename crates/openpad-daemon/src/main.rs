@@ -167,7 +167,9 @@ fn doctor_cmd() {
         println!("{} {}", symbol, check.name);
         if !check.ok {
             println!("  {}", check.hint);
-            all_ok = false;
+            if check.name != "tmux" {
+                all_ok = false; // tmux is optional, informational only
+            }
         }
     }
 

@@ -1,10 +1,6 @@
 use std::process::Command;
 use std::sync::Mutex;
 
-pub struct Target {
-    pub tmux: Option<String>,
-}
-
 /// What the user is looking at, for adapter auto-selection: the focused
 /// terminal's active tmux pane (exact match against discovered agent panes)
 /// and the frontmost window title (fallback substring match).
@@ -14,50 +10,20 @@ pub struct FocusedContext {
     pub title: Option<String>,
 }
 
+/// Everything openpad does to the outside world. All key/text output goes to
+/// the focused window (spec revision 2); `focus_pane` moves focus to a
+/// hook-discovered tmux pane (goto-waiting).
 pub trait Dispatcher: Send {
-    /// Key-token path for adapter action strings: whitespace-separated tmux
-    /// key names ("Escape Escape" = two Escape presses, "S-Tab" = shift-tab).
-    fn send_keys(&self, t: &Target, keys: &str) -> Result<(), String>;
-    /// Literal-text path for prompts: spaces stay spaces, nothing is
-    /// interpreted as a key name. Trailing '\n' presses Enter after.
-    fn send_text(&self, t: &Target, text: &str) -> Result<(), String>;
-    fn focus(&self, t: &Target) -> Result<(), String>;
+    /// Whitespace-separated key tokens ("Escape Escape" = two Escape
+    /// presses, "S-Tab" = shift-tab); trailing '\n' presses Enter after.
+    fn send_keys(&self, keys: &str) -> Result<(), String>;
+    /// Literal text: spaces stay spaces; trailing '\n' presses Enter after.
+    fn send_text(&self, text: &str) -> Result<(), String>;
+    /// Focus a tmux pane by id (e.g. "%5"): window, pane, and client.
+    fn focus_pane(&self, pane: &str) -> Result<(), String>;
     fn fire_hotkey(&self, combo: &str) -> Result<(), String>;
     /// Probe what the user is looking at (pane + window title).
     fn focused_context(&self) -> FocusedContext;
-}
-
-/// Translate an adapter keystroke string into tmux send-keys args.
-/// The (newline-stripped) string is split on whitespace: each token is a
-/// separate tmux key argument, so "Escape Escape" presses Escape twice
-/// instead of typing the words. Trailing '\n' appends the "Enter" key.
-pub fn tmux_args(target: &str, keys: &str) -> Vec<String> {
-    let mut out = vec!["send-keys".into(), "-t".into(), target.into()];
-    let (body, enter) = match keys.strip_suffix('\n') {
-        Some(b) => (b, true),
-        None => (keys, false),
-    };
-    for tok in body.split_whitespace() {
-        out.push(tok.into());
-    }
-    if enter {
-        out.push("Enter".into());
-    }
-    out
-}
-
-/// tmux args for literal text: `send-keys -l -- <text>` types the string
-/// verbatim (no key-name interpretation). Returns the literal command; the
-/// caller sends Enter separately when the text ends in '\n'.
-pub fn tmux_text_args(target: &str, text: &str) -> Vec<String> {
-    vec![
-        "send-keys".into(),
-        "-t".into(),
-        target.into(),
-        "-l".into(),
-        "--".into(),
-        text.into(),
-    ]
 }
 
 #[derive(Default)]
@@ -67,25 +33,16 @@ pub struct FakeDispatcher {
 }
 
 impl Dispatcher for FakeDispatcher {
-    fn send_keys(&self, t: &Target, keys: &str) -> Result<(), String> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(format!("send {} {}", t.tmux.as_deref().unwrap_or("focused"), keys));
+    fn send_keys(&self, keys: &str) -> Result<(), String> {
+        self.calls.lock().unwrap().push(format!("send {keys}"));
         Ok(())
     }
-    fn send_text(&self, t: &Target, text: &str) -> Result<(), String> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(format!("text {} {}", t.tmux.as_deref().unwrap_or("focused"), text));
+    fn send_text(&self, text: &str) -> Result<(), String> {
+        self.calls.lock().unwrap().push(format!("text {text}"));
         Ok(())
     }
-    fn focus(&self, t: &Target) -> Result<(), String> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(format!("focus {}", t.tmux.as_deref().unwrap_or("focused")));
+    fn focus_pane(&self, pane: &str) -> Result<(), String> {
+        self.calls.lock().unwrap().push(format!("focus {pane}"));
         Ok(())
     }
     fn fire_hotkey(&self, combo: &str) -> Result<(), String> {
@@ -97,63 +54,40 @@ impl Dispatcher for FakeDispatcher {
     }
 }
 
-/// Build an osascript keystroke command. Handles escaping and newline conversion.
-/// Trailing '\n' becomes "& return" (AppleScript's keystroke return).
-/// Escapes backslashes first, then quotes.
+/// Build an osascript keystroke command for literal text. Escapes
+/// backslashes first, then quotes; trailing '\n' becomes "& return".
 pub(crate) fn osascript_keystroke_script(keys: &str) -> String {
     let has_newline = keys.ends_with('\n');
-    let text = if has_newline {
-        &keys[..keys.len() - 1]
-    } else {
-        keys
-    };
-
-    // Escape backslashes first, then quotes
-    let escaped = text
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"");
-
+    let text = if has_newline { &keys[..keys.len() - 1] } else { keys };
+    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"");
     if text.is_empty() && has_newline {
-        // Just a newline: send keystroke return
         "tell application \"System Events\" to keystroke return".to_string()
     } else if has_newline {
-        // Text with newline: keystroke "text" & return
-        format!(
-            "tell application \"System Events\" to keystroke \"{}\" & return",
-            escaped
-        )
+        format!("tell application \"System Events\" to keystroke \"{escaped}\" & return")
     } else {
-        // Just text: keystroke "text"
-        format!(
-            "tell application \"System Events\" to keystroke \"{}\"",
-            escaped
-        )
+        format!("tell application \"System Events\" to keystroke \"{escaped}\"")
     }
 }
 
-/// osascript for a single key token in the focused-window fallback.
-/// Named keys become `key code` commands (with modifier prefixes S-/C-/M-
-/// handled); anything else is typed as literal text.
+/// osascript for a single key token: named keys become `key code` commands
+/// (with S-/C-/M- modifier prefixes); anything else is typed as text.
 pub(crate) fn osascript_key_token_script(tok: &str) -> String {
-    let (mods, base) = {
-        let mut mods = Vec::new();
-        let mut rest = tok;
-        loop {
-            if let Some(r) = rest.strip_prefix("S-") {
-                mods.push("shift down");
-                rest = r;
-            } else if let Some(r) = rest.strip_prefix("C-") {
-                mods.push("control down");
-                rest = r;
-            } else if let Some(r) = rest.strip_prefix("M-") {
-                mods.push("option down");
-                rest = r;
-            } else {
-                break;
-            }
+    let mut mods = Vec::new();
+    let mut base = tok;
+    loop {
+        if let Some(r) = base.strip_prefix("S-") {
+            mods.push("shift down");
+            base = r;
+        } else if let Some(r) = base.strip_prefix("C-") {
+            mods.push("control down");
+            base = r;
+        } else if let Some(r) = base.strip_prefix("M-") {
+            mods.push("option down");
+            base = r;
+        } else {
+            break;
         }
-        (mods, rest)
-    };
+    }
     let code = match base {
         "Escape" => Some(53),
         "Enter" | "Return" => Some(36),
@@ -174,8 +108,7 @@ pub(crate) fn osascript_key_token_script(tok: &str) -> String {
 }
 
 pub struct MacDispatcher {
-    /// Frontmost apps the focused-window path may synthesize keys into.
-    /// Empty = allow all (not recommended; config supplies defaults).
+    /// Frontmost apps keys may be synthesized into. Empty = allow all.
     pub terminal_apps: Vec<String>,
 }
 
@@ -184,7 +117,14 @@ impl MacDispatcher {
         MacDispatcher { terminal_apps }
     }
 
-    /// Frontmost application process name via System Events.
+    fn osascript(script: &str) -> Result<(), String> {
+        Command::new("osascript")
+            .args(["-e", script])
+            .status()
+            .map_err(|e| e.to_string())
+            .map(|_| ())
+    }
+
     fn frontmost_app() -> Option<String> {
         let out = Command::new("osascript")
             .args(["-e", "tell application \"System Events\" to get name of first application process whose frontmost is true"])
@@ -194,132 +134,54 @@ impl MacDispatcher {
         if name.is_empty() { None } else { Some(name) }
     }
 
-    /// Gate for the focused-window path: only type into allowlisted apps.
-    fn focused_window_allowed(&self) -> bool {
+    /// Only type into allowlisted apps: a stray approve press with a chat
+    /// app focused must do nothing.
+    fn allowed(&self) -> bool {
         if self.terminal_apps.is_empty() {
             return true;
         }
-        match Self::frontmost_app() {
-            Some(app) => self.terminal_apps.iter().any(|t| t == &app),
-            None => false,
-        }
+        Self::frontmost_app().is_some_and(|app| self.terminal_apps.contains(&app))
     }
 }
 
 impl Dispatcher for MacDispatcher {
-    fn send_keys(&self, t: &Target, keys: &str) -> Result<(), String> {
-        match &t.tmux {
-            Some(target) => {
-                let args = tmux_args(target, keys);
-                let status = Command::new("tmux")
-                    .args(&args)
-                    .status()
-                    .map_err(|e| e.to_string())?;
-                if status.success() {
-                    Ok(())
-                } else {
-                    Err(format!("tmux exited {status}"))
-                }
-            }
-            None => {
-                // focused-window path: each key token becomes its own
-                // System Events command (named keys mapped to key codes).
-                if !self.focused_window_allowed() {
-                    return Ok(()); // frontmost app not in the terminal allowlist
-                }
-                let (body, enter) = match keys.strip_suffix('\n') {
-                    Some(b) => (b, true),
-                    None => (keys, false),
-                };
-                for tok in body.split_whitespace() {
-                    let script = osascript_key_token_script(tok);
-                    Command::new("osascript")
-                        .args(["-e", &script])
-                        .status()
-                        .map_err(|e| e.to_string())?;
-                }
-                if enter {
-                    Command::new("osascript")
-                        .args(["-e", "tell application \"System Events\" to keystroke return"])
-                        .status()
-                        .map_err(|e| e.to_string())?;
-                }
-                Ok(())
-            }
+    fn send_keys(&self, keys: &str) -> Result<(), String> {
+        if !self.allowed() {
+            return Ok(());
         }
-    }
-    fn send_text(&self, t: &Target, text: &str) -> Result<(), String> {
-        match &t.tmux {
-            Some(target) => {
-                let (body, enter) = match text.strip_suffix('\n') {
-                    Some(b) => (b, true),
-                    None => (text, false),
-                };
-                let status = Command::new("tmux")
-                    .args(&tmux_text_args(target, body))
-                    .status()
-                    .map_err(|e| e.to_string())?;
-                if !status.success() {
-                    return Err(format!("tmux exited {status}"));
-                }
-                if enter {
-                    let status = Command::new("tmux")
-                        .args(["send-keys", "-t", target, "Enter"])
-                        .status()
-                        .map_err(|e| e.to_string())?;
-                    if !status.success() {
-                        return Err(format!("tmux exited {status}"));
-                    }
-                }
-                Ok(())
-            }
-            None => {
-                if !self.focused_window_allowed() {
-                    return Ok(()); // frontmost app not in the terminal allowlist
-                }
-                let script = osascript_keystroke_script(text);
-                Command::new("osascript")
-                    .args(["-e", &script])
-                    .status()
-                    .map_err(|e| e.to_string())?;
-                Ok(())
-            }
+        let (body, enter) = match keys.strip_suffix('\n') {
+            Some(b) => (b, true),
+            None => (keys, false),
+        };
+        for tok in body.split_whitespace() {
+            Self::osascript(&osascript_key_token_script(tok))?;
         }
-    }
-    fn focus(&self, t: &Target) -> Result<(), String> {
-        if let Some(target) = &t.tmux {
-            if target.starts_with('%') {
-                // discovered pane id: land on the exact window and pane
-                let _ = Command::new("tmux").args(["select-window", "-t", target]).status();
-                let _ = Command::new("tmux").args(["select-pane", "-t", target]).status();
-                Command::new("tmux")
-                    .args(["switch-client", "-t", target])
-                    .status()
-                    .map_err(|e| e.to_string())?;
-            } else {
-                let win = target.split(':').next().unwrap_or(target);
-                Command::new("tmux")
-                    .args(["switch-client", "-t", win])
-                    .status()
-                    .map_err(|e| e.to_string())?;
-            }
+        if enter {
+            Self::osascript("tell application \"System Events\" to keystroke return")?;
         }
-        Command::new("osascript")
-            .args(["-e", "tell application \"iTerm2\" to activate"])
-            .status()
-            .map_err(|e| e.to_string())?;
         Ok(())
     }
+
+    fn send_text(&self, text: &str) -> Result<(), String> {
+        if !self.allowed() {
+            return Ok(());
+        }
+        Self::osascript(&osascript_keystroke_script(text))
+    }
+
+    fn focus_pane(&self, pane: &str) -> Result<(), String> {
+        let _ = Command::new("tmux").args(["select-window", "-t", pane]).status();
+        let _ = Command::new("tmux").args(["select-pane", "-t", pane]).status();
+        let _ = Command::new("tmux").args(["switch-client", "-t", pane]).status();
+        Self::osascript("tell application \"iTerm2\" to activate")
+    }
+
     fn fire_hotkey(&self, combo: &str) -> Result<(), String> {
-        // combo like "key code 64 using {control down, option down}"; exact value comes
-        // from config (wispr_hotkey_osascript), recorded during Task 5 verification.
-        let script = format!("tell application \"System Events\" to {combo}");
-        Command::new("osascript")
-            .args(["-e", &script])
-            .status()
-            .map_err(|e| e.to_string())?;
-        Ok(())
+        // combo like "key code 41 using {option down}", from config
+        // (wispr_hotkey_osascript).
+        Self::osascript(&format!("tell application \"System Events\" to {combo}"))
     }
+
     fn focused_context(&self) -> FocusedContext {
         // Active tmux pane of the most recently used client; works from
         // outside tmux, errors harmlessly when no server is running.
@@ -346,76 +208,16 @@ mod dispatch_tests {
     use super::*;
 
     #[test]
-    fn tmux_send_keys_args() {
-        assert_eq!(
-            tmux_args("claude:0", "Escape"),
-            vec!["send-keys", "-t", "claude:0", "Escape"]
-        );
-        assert_eq!(
-            tmux_args("claude:0", "/compact\n"),
-            vec!["send-keys", "-t", "claude:0", "/compact", "Enter"]
-        );
-    }
-
-    #[test]
-    fn tmux_multi_key_action_splits_into_tokens() {
-        // "Escape Escape" must press Escape twice, not type the words
-        assert_eq!(
-            tmux_args("claude:0", "Escape Escape"),
-            vec!["send-keys", "-t", "claude:0", "Escape", "Escape"]
-        );
-    }
-
-    #[test]
-    fn tmux_text_args_are_literal() {
-        assert_eq!(
-            tmux_text_args("claude:0", "Run the test suite."),
-            vec!["send-keys", "-t", "claude:0", "-l", "--", "Run the test suite."]
-        );
-    }
-
-    #[test]
-    fn fake_dispatcher_send_text_records_exact_format() {
+    fn fake_dispatcher_records_exact_formats() {
         let d = FakeDispatcher::default();
-        d.send_text(&Target { tmux: Some("claude:0".into()) }, "hello world\n").unwrap();
-        assert_eq!(d.calls.lock().unwrap().as_slice(), ["text claude:0 hello world\n"]);
-    }
-
-    #[test]
-    fn osascript_key_tokens() {
+        d.send_keys("y").unwrap();
+        d.send_text("hello world\n").unwrap();
+        d.focus_pane("%7").unwrap();
+        d.fire_hotkey("key code 41 using {option down}").unwrap();
         assert_eq!(
-            osascript_key_token_script("Escape"),
-            "tell application \"System Events\" to key code 53"
+            d.calls.lock().unwrap().as_slice(),
+            ["send y", "text hello world\n", "focus %7", "hotkey key code 41 using {option down}"]
         );
-        assert_eq!(
-            osascript_key_token_script("S-Tab"),
-            "tell application \"System Events\" to key code 48 using {shift down}"
-        );
-        assert_eq!(
-            osascript_key_token_script("y"),
-            "tell application \"System Events\" to keystroke \"y\""
-        );
-    }
-
-    #[test]
-    fn fake_dispatcher_records_send_keys() {
-        let d = FakeDispatcher::default();
-        d.send_keys(&Target { tmux: Some("claude:0".into()) }, "1").unwrap();
-        assert_eq!(d.calls.lock().unwrap().as_slice(), ["send claude:0 1"]);
-    }
-
-    #[test]
-    fn fake_dispatcher_focus_records_exact_format() {
-        let d = FakeDispatcher::default();
-        d.focus(&Target { tmux: Some("work:0".into()) }).unwrap();
-        assert_eq!(d.calls.lock().unwrap().as_slice(), ["focus work:0"]);
-    }
-
-    #[test]
-    fn fake_dispatcher_hotkey_records_exact_format() {
-        let d = FakeDispatcher::default();
-        d.fire_hotkey("key code 64 using {control down}").unwrap();
-        assert_eq!(d.calls.lock().unwrap().as_slice(), ["hotkey key code 64 using {control down}"]);
     }
 
     #[test]
@@ -443,26 +245,30 @@ mod dispatch_tests {
     }
 
     #[test]
-    fn osascript_keystroke_escaped_quotes() {
-        assert_eq!(
-            osascript_keystroke_script("say \"hi\""),
-            "tell application \"System Events\" to keystroke \"say \\\"hi\\\"\""
-        );
-    }
-
-    #[test]
-    fn osascript_keystroke_escaped_backslash() {
-        assert_eq!(
-            osascript_keystroke_script("a\\b"),
-            "tell application \"System Events\" to keystroke \"a\\\\b\""
-        );
-    }
-
-    #[test]
-    fn osascript_keystroke_backslash_and_quote() {
+    fn osascript_keystroke_escaping_backslash_then_quote() {
         assert_eq!(
             osascript_keystroke_script("path\\\"file\""),
             "tell application \"System Events\" to keystroke \"path\\\\\\\"file\\\"\""
+        );
+    }
+
+    #[test]
+    fn osascript_key_tokens() {
+        assert_eq!(
+            osascript_key_token_script("Escape"),
+            "tell application \"System Events\" to key code 53"
+        );
+        assert_eq!(
+            osascript_key_token_script("S-Tab"),
+            "tell application \"System Events\" to key code 48 using {shift down}"
+        );
+        assert_eq!(
+            osascript_key_token_script("Down"),
+            "tell application \"System Events\" to key code 125"
+        );
+        assert_eq!(
+            osascript_key_token_script("y"),
+            "tell application \"System Events\" to keystroke \"y\""
         );
     }
 }

@@ -16,15 +16,12 @@ pub struct Config {
 pub struct AgentCfg {
     pub name: String,
     pub adapter: String,
-    pub tmux: Option<String>,
 }
 
 #[derive(Deserialize)]
 struct RawAgent {
     name: String,
     adapter: String,
-    #[serde(default)]
-    tmux: Option<String>,
 }
 
 fn default_terminal_apps() -> Vec<String> {
@@ -52,7 +49,7 @@ pub fn default_toml() -> &'static str {
 wispr_hotkey_osascript = "key code 41 using {option down}"  # Option+; — verified PTT binding on this machine
 
 # Steering keys act on the focused window; agents in tmux additionally
-# self-announce their pane via hooks, which powers the goto keys.
+# self-announce their pane via hooks, which powers the goto-waiting key.
 # terminal_apps is the allowlist of frontmost apps keys may type into:
 # terminal_apps = ["iTerm2", "Terminal", "WezTerm", "Alacritty", "kitty", "Warp", "Ghostty", "Code", "Cursor"]
 
@@ -93,7 +90,7 @@ pub fn parse(src: &str) -> Result<Config, String> {
         agents: raw
             .agents
             .into_iter()
-            .map(|a| AgentCfg { name: a.name, adapter: a.adapter, tmux: a.tmux })
+            .map(|a| AgentCfg { name: a.name, adapter: a.adapter })
             .collect(),
         prompts,
         wispr_hotkey_osascript: raw.wispr_hotkey_osascript,
@@ -126,7 +123,6 @@ mod tests {
         let cfg = parse(default_toml()).unwrap();
         assert_eq!(cfg.agents.len(), 3);
         assert_eq!(cfg.agents[0].name, "claude");
-        assert_eq!(cfg.agents[0].tmux, None, "panes are discovered via hooks, not configured");
         assert_eq!(cfg.ingest_addr, "127.0.0.1:7676");
         assert!(cfg.terminal_apps.iter().any(|a| a == "iTerm2"), "allowlist has defaults");
         assert_eq!(cfg.prompts.get(&1).map(|s| s.as_str()), Some("Summarize the current state of this task and what remains."));

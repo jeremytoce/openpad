@@ -5,11 +5,11 @@ Codex CLI, and Kimi. Built on the DOIO KB16-01. Inspired by the Work
 Louder x OpenAI pad, but not tied to one vendor or one agent.
 
 openpad turns a 16-key + 3-encoder macropad into a steering wheel for
-agents you run in tmux: approve or reject tool calls, interrupt, branch,
-undo, launch slash commands, push-to-talk into Wispr Flow, and see at a
-glance (via the pad's RGB) whether an agent is idle, thinking, running,
-waiting on you, done, or errored. All without stealing window focus from
-whatever you're looking at.
+CLI agents: approve or reject tool calls, interrupt, continue, launch
+slash commands, push-to-talk into Wispr Flow, and see at a glance (via
+the pad's RGB) whether any agent is idle, thinking, running, waiting on
+you, done, or errored. The model is simple: **LEDs summon you, focus
+picks the target, keys act on what you're looking at.**
 
 ## How it works
 
@@ -17,12 +17,17 @@ whatever you're looking at.
   (and, when present, Codex) that POST lifecycle events to a small local
   ingest server. The daemon turns those events into per-agent state and
   renders it to the pad's RGB.
-- **Steering without focus stealing**: pad keys send keystrokes straight
-  into the bound agent's tmux pane over `tmux send-keys`, addressed by
-  session name. Your foreground window never changes unless you explicitly
-  ask to focus (binding an agent, or the encoder's "focus pane" push).
-- **Voice**: a dedicated Mic key focuses the bound agent's pane, then fires
-  the Wispr Flow push-to-talk hotkey.
+- **Focused-window steering**: pad keys synthesize keystrokes into the
+  frontmost terminal (allowlisted apps only), using the agent profile that
+  matches what you're looking at: the focused terminal's active tmux pane
+  is matched against hook-discovered panes, else the window title. The
+  same physical reject key sends Codex's `Esc` in a Codex window and
+  Claude's `n` in a Claude window.
+- **Goto-waiting**: when the pad pulses amber, one key jumps focus to the
+  session that is blocked on you. Pad keys themselves are consumed by an
+  event tap, so they never leak stray characters into your terminal.
+- **Voice**: the Mic key fires the Wispr Flow push-to-talk hotkey into the
+  focused window.
 - **Adapters are data, not code**: each agent's key bindings and
   event-to-state mapping live in a declarative TOML file under
   `adapters/`. Adding support for a new agent means writing a TOML file,
@@ -105,10 +110,9 @@ tmux
 claude
 ```
 
-The static targets in `~/.config/openpad/config.toml` are only fallbacks
-for the moment before an agent's first hook fires. Agents running outside
-tmux still light the LEDs, but steering falls back to typing into the
-focused window.
+Agents running outside tmux still light the LEDs and are fully steerable;
+the only thing tmux adds is the goto-waiting key (jumping focus to a
+blocked session requires an addressable pane).
 
 ### 5. Run the daemon
 
@@ -117,8 +121,8 @@ openpad service install
 ```
 
 On first run this writes a default config to
-`~/.config/openpad/config.toml` (agent list, tmux session names, ingest
-port, prompt templates, Wispr Flow hotkey). Edit it to change any of
+`~/.config/openpad/config.toml` (agent list, terminal allowlist, ingest
+port, prompt templates 1-7, Wispr Flow hotkey). Edit it to change any of
 those. If no pad is attached, `openpad run` still runs (steering and hooks
 work) but skips RGB output.
 
@@ -128,9 +132,10 @@ work) but skips RGB output.
 openpad doctor
 ```
 
-Checks whether the pad is on USB, tmux is reachable, the ingest port is
-free (or already held by openpad itself), and Claude hooks are installed.
-It prints a one-line hint for anything that's wrong.
+Checks whether the pad is on USB, the ingest port is free (or already
+held by openpad itself), and Claude hooks are installed; reports tmux
+reachability as information (tmux is optional). It prints a one-line hint
+for anything that's wrong.
 
 ### Debugging pad input
 

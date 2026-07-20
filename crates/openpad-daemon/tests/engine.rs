@@ -27,7 +27,7 @@ fn approve_synthesizes_into_focused_window() {
     e.on_key(PhysKey::Key(Layer::Steer, 0)); // approve
     let calls = e.dispatcher().calls.lock().unwrap().clone();
     assert!(
-        calls.iter().any(|c| c.starts_with("send focused ")),
+        calls.iter().any(|c| c.starts_with("send ")),
         "approve must target the focused window, got: {calls:?}"
     );
     assert!(
@@ -85,7 +85,7 @@ fn prompt_uses_literal_text_path_into_focused_window() {
     let mut e = engine();
     e.on_key(PhysKey::Key(Layer::Steer, 11)); // Prompt 1
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    let text_call = calls.iter().find(|c| c.starts_with("text focused "));
+    let text_call = calls.iter().find(|c| c.starts_with("text "));
     assert!(text_call.is_some(), "prompt must go through send_text to the focused window, got: {calls:?}");
     assert!(text_call.unwrap().contains(' '), "prompt text keeps its spaces");
 }
@@ -100,7 +100,7 @@ fn focused_pane_selects_that_agents_adapter() {
     e.on_key(PhysKey::Key(Layer::Steer, 2)); // reject
     let calls = e.dispatcher().calls.lock().unwrap().clone();
     assert!(
-        calls.iter().any(|c| c == "send focused Escape"),
+        calls.iter().any(|c| c == "send Escape"),
         "codex is focused, reject must be codex's Escape, not claude's n: {calls:?}"
     );
 }
@@ -111,7 +111,7 @@ fn window_title_selects_adapter_when_no_pane_match() {
     e.dispatcher().context.lock().unwrap().title = Some("codex — ~/dev/openpad".into());
     e.on_key(PhysKey::Key(Layer::Steer, 2)); // reject
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert!(calls.iter().any(|c| c == "send focused Escape"), "title match must pick codex: {calls:?}");
+    assert!(calls.iter().any(|c| c == "send Escape"), "title match must pick codex: {calls:?}");
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn no_context_falls_back_to_selected_agent() {
     let mut e = engine();
     e.on_key(PhysKey::Key(Layer::Steer, 2)); // reject, nothing focused-identifiable
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert!(calls.iter().any(|c| c == "send focused n"), "default selected agent is claude: {calls:?}");
+    assert!(calls.iter().any(|c| c == "send n"), "default selected agent is claude: {calls:?}");
 }
 
 #[test]
@@ -151,7 +151,7 @@ fn continue_key_types_literal_text() {
     let mut e = engine();
     e.on_key(PhysKey::Key(Layer::Steer, 5)); // continue
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert!(calls.iter().any(|c| c == "text focused continue\n"), "got: {calls:?}");
+    assert!(calls.iter().any(|c| c == "text continue\n"), "got: {calls:?}");
 }
 
 #[test]
@@ -161,7 +161,7 @@ fn encoder1_is_a_menu_knob() {
     e.on_key(PhysKey::EncoderTurn(0, -1));
     e.on_key(PhysKey::EncoderPush(0));
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert_eq!(calls, ["send focused Down", "send focused Up", "send focused Enter"]);
+    assert_eq!(calls, ["send Down", "send Up", "send Enter"]);
 }
 
 #[test]
@@ -170,10 +170,10 @@ fn encoder2_push_toggles_launch_layer() {
     e.on_key(PhysKey::EncoderPush(1)); // lock Launch
     e.on_key(PhysKey::Key(Layer::Steer, 0)); // physical key 1 → /review, not approve
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert!(calls.iter().any(|c| c == "send focused /review Enter" || c.starts_with("send focused /review")),
+    assert!(calls.iter().any(|c| c == "send /review Enter" || c.starts_with("send /review")),
         "locked layer must run Launch actions: {calls:?}");
     e.on_key(PhysKey::EncoderPush(1)); // unlock
     e.on_key(PhysKey::Key(Layer::Steer, 0)); // approve again
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert!(calls.iter().any(|c| c == "send focused y"), "unlock must restore Steer: {calls:?}");
+    assert!(calls.iter().any(|c| c == "send y"), "unlock must restore Steer: {calls:?}");
 }

@@ -40,7 +40,7 @@ fn rgb_to_hs(c: Rgb) -> (u8, u8) {
     let (r, g, b) = (c.0 as f32 / 255.0, c.1 as f32 / 255.0, c.2 as f32 / 255.0);
     let max = r.max(g).max(b); let min = r.min(g).min(b); let d = max - min;
     let h = if d == 0.0 { 0.0 }
-        else if max == r { 60.0 * (((g - b) / d) % 6.0) }
+        else if max == r { 60.0 * ((g - b) / d) }
         else if max == g { 60.0 * ((b - r) / d + 2.0) }
         else { 60.0 * ((r - g) / d + 4.0) };
     let h = if h < 0.0 { h + 360.0 } else { h };
@@ -54,7 +54,7 @@ impl PadLink for HidPad {
         if self.last.as_ref() == Some(frame) { return Ok(()); } // skip no-op writes
         let c = frame[3];
         let (h, s) = rgb_to_hs(c);
-        let v = (c.0.max(c.1).max(c.2)) as u8;
+        let v = c.0.max(c.1).max(c.2);
         self.via_set(2, &[1])?;          // effect: solid color
         self.via_set(4, &[h, s])?;       // hue/sat
         self.via_set(1, &[v])?;          // brightness = value → carries the WAITING pulse
