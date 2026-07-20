@@ -60,5 +60,15 @@ fn unknown_action_for_agent_is_noop_not_error() {
     let before = e.dispatcher().calls.lock().unwrap().len();
     e.on_key(PhysKey::Key(Layer::Steer, 12));     // plan
     let after = e.dispatcher().calls.lock().unwrap().len();
-    assert_eq!(before + 1, after, "only the focus from bind; no send for missing action");
+    assert_eq!(before, after, "missing adapter action must be a complete no-op");
+}
+
+#[test]
+fn empty_action_is_noop() {
+    let mut e = engine();
+    e.on_key(PhysKey::Key(Layer::Steer, 0));      // bind claude
+    let before = e.dispatcher().calls.lock().unwrap().len();
+    e.on_key(PhysKey::Key(Layer::Steer, 9));      // ask (claude maps this to "")
+    let after = e.dispatcher().calls.lock().unwrap().len();
+    assert_eq!(before, after, "empty-string adapter action must be a complete no-op");
 }

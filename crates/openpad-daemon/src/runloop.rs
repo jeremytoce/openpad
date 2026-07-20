@@ -26,10 +26,10 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
     }
 
     fn send_action(&self, idx: usize, action: &str) {
-        // Always (re-)focus the target pane before attempting to act on it, even
-        // when the adapter has no keystroke for this action -- mirrors Mic's
-        // focus-then-act pattern and keeps the pane in front for the user.
-        let _ = self.dispatcher.focus(&self.target(idx));
+        // Steering actions must reach the bound agent's pane without stealing
+        // window focus. Focus jumps happen only on explicit Bind (row-1 keys),
+        // EncoderPush(1), and Mic (focus-then-dictate is deliberate) -- never
+        // here.
         if let Some(keys) = self.adapters[idx].keys_for(action) {
             if !keys.is_empty() {
                 let _ = self.dispatcher.send_keys(&self.target(idx), keys);
