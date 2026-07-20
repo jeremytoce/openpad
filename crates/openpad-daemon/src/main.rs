@@ -20,8 +20,101 @@ fn main() {
         Some("listen") => listen(),
         Some("hooks") => hooks(args.next().as_deref()),
         Some("doctor") => doctor_cmd(),
+        Some("service") => service(args.next().as_deref()),
         _ => usage(),
     }
+}
+
+fn service(sub: Option<&str>) {
+    use openpad_daemon::service::{log_path, plist, plist_path, LABEL};
+    let home = std::env::var("HOME").unwrap_or_else(|_| {
+        eprintln!("openpad: HOME not set");
+        std::process::exit(1);
+    });
+    let ppath = plist_path(&home);
+    let uid = libc_getuid();
+    let domain_target = format!("gui/{uid}/{LABEL}");
+    let launchctl = |args: &[&str]| {
+        std::process::Command::new("launchctl")
+            .args(args)
+            .output()
+            .map(|o| (o.status.success(), String::from_utf8_lossy(&o.stderr).trim().to_string()))
+            .unwrap_or((false, "launchctl not found".into()))
+    };
+    match sub {
+        Some("install") => {
+            let binary = std::env::current_exe()
+                .ok()
+                .and_then(|p| p.canonicalize().ok())
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| format!("{home}/.local/bin/openpad"));
+            std::fs::create_dir_all(format!("{home}/Library/LaunchAgents")).ok();
+            if let Err(e) = std::fs::write(&ppath, plist(&binary, &log_path(&home))) {
+                eprintln!("openpad: failed to write {ppath}: {e}");
+                std::process::exit(1);
+            }
+            // re-bootstrap cleanly if a previous version is loaded
+            launchctl(&["bootout", &format!("gui/{uid}"), &ppath]);
+            let (ok, err) = launchctl(&["bootstrap", &format!("gui/{uid}"), &ppath]);
+            if ok {
+                println!("openpad: service installed and started ({LABEL})");
+                println!("openpad: logs at {}", log_path(&home));
+                println!("openpad: it now starts at login and restarts on crash.");
+                println!("openpad: grant Accessibility to 'openpad' if macOS prompts.");
+            } else {
+                eprintln!("openpad: bootstrap failed: {err}");
+                std::process::exit(1);
+            }
+        }
+        Some("uninstall") => {
+            launchctl(&["bootout", &format!("gui/{uid}"), &ppath]);
+            match std::fs::remove_file(&ppath) {
+                Ok(_) => println!("openpad: service uninstalled"),
+                Err(e) => eprintln!("openpad: could not remove {ppath}: {e}"),
+            }
+        }
+        Some("start") => {
+            let (ok, err) = launchctl(&["bootstrap", &format!("gui/{uid}"), &ppath]);
+            if ok {
+                println!("openpad: service started");
+            } else {
+                eprintln!("openpad: start failed ({err}); is the service installed?");
+                std::process::exit(1);
+            }
+        }
+        Some("stop") => {
+            // bootout (not `stop`): KeepAlive would revive a merely-stopped job.
+            let (ok, err) = launchctl(&["bootout", &format!("gui/{uid}"), &ppath]);
+            if ok {
+                println!("openpad: service stopped (pad released; safe to use VIA)");
+                println!("openpad: restart with `openpad service start`");
+            } else {
+                eprintln!("openpad: stop failed: {err}");
+                std::process::exit(1);
+            }
+        }
+        Some("status") => {
+            let (ok, _) = launchctl(&["print", &domain_target]);
+            println!(
+                "openpad: service {}",
+                if ok { "running" } else { "not running" }
+            );
+        }
+        _ => {
+            println!("usage: openpad service <install|uninstall|start|stop|status>");
+        }
+    }
+}
+
+fn libc_getuid() -> u32 {
+    // std has no getuid; shelling to `id -u` avoids a libc dependency.
+    std::process::Command::new("id")
+        .arg("-u")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(501)
 }
 
 fn usage() {
@@ -33,6 +126,11 @@ fn usage() {
     println!("  hooks install    install openpad's Claude Code hooks into ~/.claude/settings.json");
     println!("  hooks uninstall  remove openpad's hooks from ~/.claude/settings.json");
     println!("  doctor           check pad/tmux/hooks/port health");
+    println!("  service install  run the daemon as a login service (launchd), no terminal needed");
+    println!("  service stop     release the pad (required before editing the layout in VIA)");
+    println!("  service start    restart the service after a stop");
+    println!("  service status   is the service running?");
+    println!("  service uninstall  remove the login service");
 }
 
 fn listen() {

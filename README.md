@@ -111,7 +111,7 @@ actually exist.
 ### 5. Run the daemon
 
 ```bash
-openpad run
+openpad service install
 ```
 
 On first run this writes a default config to
