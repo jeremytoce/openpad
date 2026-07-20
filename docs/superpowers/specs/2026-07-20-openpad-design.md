@@ -206,3 +206,37 @@ stomp another's WAITING). Approved redesign:
   leakage caveat) if grab fails.
 - tmux integration survives only opportunistically: goto keys focus
   discovered panes when they exist.
+
+## Revision 3 (2026-07-20): Plan 2 — the UI milestone
+
+Scope approved: config editor + HUD + tray in one drop. Design deltas from
+the original UI section:
+
+- **Two processes, one boundary.** The headless daemon stays the launchd
+  service and single HID owner. The UI is a separate Tauri v2 app
+  (`openpad-ui`) talking to the daemon exclusively over the loopback HTTP
+  API (extended ingest server). Crash isolation: a webview crash never
+  drops the pad. The original "one binary" goal becomes "one .app bundle
+  that manages the daemon service."
+- **VIA replacement (the headline).** The UI programs the pad's firmware
+  layout directly over raw HID (VIA dynamic-keymap protocol, cmd 0x04
+  read / 0x05 write), via a daemon endpoint (the daemon owns the HID
+  handle, so no service-stop dance). VIA.app leaves the onboarding path
+  entirely: plug in → "Program pad" → done. EMPIRICAL-PENDING: protocol
+  probe on the KB16-01 (pad currently unplugged).
+- **Keymap becomes data.** The default keymap moves from code to
+  `~/.config/openpad/config.toml` (embedded defaults remain the fallback).
+  The editor edits it; the daemon hot-reloads on change. Click a rendered
+  key → pick verb / prompt / literal text / layer toggle, per layer.
+- **HUD.** Frameless always-on-top window: current layer's legend, live
+  per-agent states (LED mirror), and the pending tool call while WAITING
+  (`detail` from PreToolUse/Notification, which ingest already captures
+  and the engine now must retain). Poll /state at 250ms; no websockets.
+- **Config share.** One-file export/import of the whole setup (keymap,
+  prompts, allowlist, adapter overrides) for community layouts.
+- **Frontend is dependency-free.** Plain HTML/CSS/JS served by Tauri, no
+  node toolchain, no bundler: contributors need only Rust + the Tauri CLI.
+- Tray: service status, pause, open editor, open HUD.
+
+Out of scope for Plan 2: session slots (multi-session ontology), Windows/
+Linux, packaging/signing (Plan 3).
