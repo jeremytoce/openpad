@@ -1,11 +1,25 @@
-fidelity = "degraded"
+# Codex CLI ships a full hooks system (PermissionRequest, PreToolUse, Stop, ...)
+# with stdin-JSON payloads carrying hook_event_name — same shape as Claude's.
+# See docs/verification.md. The argv-based `notify` (agent-turn-complete) remains
+# a fallback for older Codex versions.
+fidelity = "full"
 
 [actions]
-approve   = "y"
-reject    = "n"
-interrupt = "Escape"
-compact   = "/compact\n"
-clear     = "/new\n"
+approve        = "y"           # "Yes, proceed (y)"
+approve_always = "p"           # "Yes, and don't ask again for commands starting with <prefix> (p)"
+reject         = "Escape"      # "No, and tell Codex what to do differently (esc)"
+interrupt      = "Escape"      # single Esc interrupts a running turn
+plan           = "/plan\n"
+compact        = "/compact\n"
+clear          = "/new\n"
+review         = "/review\n"
 
 [events]
-agent-turn-complete = "DONE"
+SessionStart        = "IDLE"
+UserPromptSubmit    = "THINKING"
+PreToolUse          = "RUNNING"
+PostToolUse         = "RUNNING"
+PermissionRequest   = "WAITING"
+SubagentStop        = "RUNNING"
+Stop                = "DONE"
+agent-turn-complete = "DONE"   # notify fallback path

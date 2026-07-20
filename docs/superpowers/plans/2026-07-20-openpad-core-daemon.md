@@ -799,7 +799,7 @@ curl -s -m 1 -X POST "http://127.0.0.1:7676/event?agent=${OPENPAD_AGENT:-claude}
 exit 0
 ```
 
-`shims/codex-notify.sh`:
+`shims/codex-notify.sh` (fallback for older Codex versions; current Codex has stdin-JSON hooks — point its `[hooks]` config at `claude-hook.sh` pattern with `OPENPAD_AGENT=codex`, see docs/verification.md):
 ```bash
 #!/usr/bin/env bash
 # Codex notify shim: argv[1] is a JSON payload with a "type" field.
@@ -1296,7 +1296,7 @@ Default `config.toml` content (embedded via `default_toml()`):
 ingest_addr = "127.0.0.1:7676"
 # osascript fragment fired for the Mic key; set to match Wispr Flow's push-to-talk
 # hotkey (see docs/verification.md, Task 5 Step 4)
-wispr_hotkey_osascript = "key code 64 using {control down, option down, command down}"
+wispr_hotkey_osascript = "key code 41 using {option down}"  # Option+; — verified PTT binding on this machine
 
 [[agents]]
 name = "claude"

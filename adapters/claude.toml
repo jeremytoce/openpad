@@ -1,21 +1,24 @@
 fidelity = "full"
 
 [actions]
-approve        = "1"
-approve_always = "2"
-reject         = "3"
-interrupt      = "Escape"
+approve        = "y"           # documented: confirm:yes = Y or Enter
+approve_always = "2"           # EMPIRICAL-PENDING: digit vs Tab+y (docs/verification.md)
+reject         = "n"           # documented: confirm:no = N (Esc also rejects when dialog open)
+interrupt      = "Escape"      # stops current response/tool call
 ask            = ""            # focuses pane; typing is the user's
-plan           = "S-Tab"       # tmux send-keys token for shift-tab
+plan           = "S-Tab"       # cycles default → acceptEdits → plan (cycle, not toggle)
 compact        = "/compact\n"
 clear          = "/clear\n"
-undo           = "Escape Escape"
+undo           = "Escape Escape"  # opens rewind menu on empty input
 
 [events]
-SessionStart  = "IDLE"
-UserPromptSubmit = "THINKING"
-PreToolUse    = "RUNNING"
-PostToolUse   = "RUNNING"
-Notification  = "WAITING"
-Stop          = "DONE"
-SubagentStop  = "RUNNING"
+SessionStart       = "IDLE"
+UserPromptSubmit   = "THINKING"
+PreToolUse         = "RUNNING"
+PostToolUse        = "RUNNING"
+PostToolUseFailure = "ERROR"
+Notification       = "WAITING"
+Stop               = "DONE"
+StopFailure        = "ERROR"
+SubagentStop       = "RUNNING"
+SessionEnd         = "IDLE"
