@@ -8,7 +8,7 @@ those F-key + modifier combinations back into logical pad events
 (`crates/openpad-daemon/src/input.rs`). This file is the source of truth for
 that key programming.
 
-There is no `kb16-via.json` checked into this repo yet — VIA layout export
+There is no `kb16-via.json` checked into this repo yet. VIA layout export
 requires clicking through VIA's GUI with a physical pad attached, which
 isn't something that can be scripted or fabricated here. The table below
 is complete enough to build the layout by hand in about five minutes.
@@ -28,7 +28,7 @@ Once you've built and tested it, export it (see below) and commit
 VIA shows two layers, 0 and 1, selectable by the tab strip at the top of
 the **Keymap** view. For each key you assign, click the physical key in
 VIA's on-screen picture, then click the keycode in the panel below (the
-**Basic** tab has bare F13-F20; hold a modifier chip — Shift / Ctrl / Alt —
+**Basic** tab has bare F13-F20). Hold a modifier chip (Shift, Ctrl, Alt)
 in the same panel before clicking the F-key to produce combos like
 `LSFT(F13)`; layer keys `MO(1)` / `TG(1)` live under the **Layers** tab).
 
@@ -45,7 +45,7 @@ own numbering for the KB16-01's 4x4 grid:
 Three rotary encoders (each with a push switch) sit outside this grid;
 VIA exposes them as separate CCW / CW / push assignments per layer.
 
-### Layer 0 (Steer layer — default)
+### Layer 0: Steer layer (default)
 
 | Key | VIA keycode | openpad action |
 |----:|-------------|-----------------|
@@ -66,7 +66,7 @@ VIA exposes them as separate CCW / CW / push assignments per layer.
 | 15 | `LSFT(F19)` | Clear |
 | 16 | `MO(1)` | Hold: momentary Launch layer |
 
-### Layer 1 (Launch layer — held via key 16, or locked via `TG(1)`)
+### Layer 1: Launch layer (held via key 16, or locked via `TG(1)`)
 
 | Key | VIA keycode | openpad action |
 |----:|-------------|-----------------|
@@ -87,12 +87,12 @@ VIA exposes them as separate CCW / CW / push assignments per layer.
 | 15 | `LCTL(LSFT(F19))` | logs viewer *(reserved, Plan 3)* |
 | 16 | `TG(1)` | Toggle: lock/unlock Launch layer |
 
-Row 1 (keys 1-4) is identical on both layers on purpose — bind/broadcast
+Row 1 (keys 1-4) is identical on both layers on purpose: bind/broadcast
 should always be one tap away, whichever layer you're on.
 
 Key 16 is programmed as a layer key (`MO(1)` on layer 0, `TG(1)` on layer
-1), not as an F-key combo. The daemon never receives a HID event for it —
-the layer switch happens entirely in the pad's firmware. That's why
+1), not as an F-key combo. The daemon never receives a HID event for it.
+The layer switch happens entirely in the pad's firmware. That's why
 `Action::LayerHold` in `crates/openpad-core/src/keymap.rs` is a documented
 no-op: there is nothing for it to do.
 
@@ -100,7 +100,7 @@ no-op: there is nothing for it to do.
 
 All three encoders are read by the daemon as `Alt`+F-key combos
 (`crates/openpad-daemon/src/input.rs`). Program these the same on both
-layers — encoders aren't layer-switched.
+layers. Encoders aren't layer-switched.
 
 | Encoder | CCW | CW | Push |
 |---------|-----|----|----|
@@ -110,14 +110,14 @@ layers — encoders aren't layer-switched.
 
 Current daemon behavior per encoder (see `crates/openpad-daemon/src/runloop.rs`):
 
-- **Encoder 1** (turn): reserved for transcript scroll — not wired up yet (Plan 2).
-- **Encoder 1** (push): reserved — not wired up yet.
+- **Encoder 1** (turn): reserved for transcript scroll, not wired up yet (Plan 2).
+- **Encoder 1** (push): reserved, not wired up yet.
 - **Encoder 2** (turn): cycles which agent is bound (wraps claude -> codex -> kimi -> claude).
 - **Encoder 2** (push): focuses the bound agent's pane. This is the one intentional
-  focus-stealing action tied to a steering key — everything else routes to the
+  focus-stealing action tied to a steering key. Everything else routes to the
   agent's tmux pane without touching window focus.
-- **Encoder 3** (turn): reserved for model-tier switching — not wired up yet (Plan 2).
-- **Encoder 3** (push): reserved — not wired up yet.
+- **Encoder 3** (turn): reserved for model-tier switching, not wired up yet (Plan 2).
+- **Encoder 3** (push): reserved, not wired up yet.
 
 ## Exporting (do this once you've built and tested the layout)
 

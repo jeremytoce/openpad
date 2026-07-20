@@ -1,14 +1,14 @@
 # openpad
 
-An open-source macropad controller for CLI coding agents — Claude Code,
-Codex CLI, and Kimi — built on the DOIO KB16-01. Inspired by the Work
+An open-source macropad controller for CLI coding agents: Claude Code,
+Codex CLI, and Kimi. Built on the DOIO KB16-01. Inspired by the Work
 Louder x OpenAI pad, but not tied to one vendor or one agent.
 
 openpad turns a 16-key + 3-encoder macropad into a steering wheel for
 agents you run in tmux: approve or reject tool calls, interrupt, branch,
 undo, launch slash commands, push-to-talk into Wispr Flow, and see at a
 glance (via the pad's RGB) whether an agent is idle, thinking, running,
-waiting on you, done, or errored — all without stealing window focus from
+waiting on you, done, or errored. All without stealing window focus from
 whatever you're looking at.
 
 ## How it works
@@ -53,8 +53,8 @@ tried.
 cargo build --release
 ```
 
-The binary is `target/release/openpad`. (A packaged install path — Homebrew
-formula, code signing — is planned but not done; for now, build from
+The binary is `target/release/openpad`. A packaged install path (Homebrew
+formula, code signing) is planned but not done; for now, build from
 source or run via `cargo run -p openpad-daemon --release -- <command>`.)
 
 ### 2. Program and import the VIA layout
@@ -79,7 +79,7 @@ API yet, so `hooks install` prints the one line to add by hand to
 ### 4. Start your agent sessions in tmux
 
 openpad addresses agents by tmux session name. The default config expects
-`claude:0`, `codex:0`, and `kimi:0` — i.e. a session named after the agent,
+`claude:0`, `codex:0`, and `kimi:0`. That is, a session named after the agent,
 with the agent running in window 0:
 
 ```bash
@@ -89,7 +89,7 @@ claude
 ```
 
 Repeat for `codex` / `kimi` sessions as needed. You don't have to run all
-three — openpad only lights up and steers agents whose tmux sessions
+three. Openpad only lights up and steers agents whose tmux sessions
 actually exist.
 
 ### 5. Run the daemon
@@ -111,8 +111,8 @@ openpad doctor
 ```
 
 Checks whether the pad is on USB, tmux is reachable, the ingest port is
-free (or already held by openpad itself), and Claude hooks are installed —
-and prints a one-line hint for anything that's wrong.
+free (or already held by openpad itself), and Claude hooks are installed.
+It prints a one-line hint for anything that's wrong.
 
 ### Debugging pad input
 
@@ -121,7 +121,7 @@ openpad listen
 ```
 
 Prints every decoded pad event (`Key`, `EncoderTurn`, `EncoderPush`) as you
-press it — useful for confirming a VIA layout was programmed correctly, or
+press it: useful for confirming a VIA layout was programmed correctly, or
 for wiring in new key assignments.
 
 ## State / color legend
@@ -135,7 +135,7 @@ for wiring in new key assignments.
 | DONE | green | static, decays to IDLE after 5s |
 | ERROR | red | static |
 
-WAITING is the only state that animates (a slow triangle-wave pulse) — the
+WAITING is the only state that animates (a slow triangle-wave pulse). The
 pad only draws your eye in motion when an agent is actually waiting on
 you. Every other state is a solid, steady color so it doesn't compete for
 attention.
@@ -147,11 +147,11 @@ attention.
   read on every state transition, including WAITING when a permission
   prompt is open.
 - **Codex CLI**: full fidelity. Codex ships its own hooks system, and its
-  `PermissionRequest` hook maps directly to an accurate WAITING light —
-  the same fidelity as Claude. Older Codex versions without the hooks
+  `PermissionRequest` hook maps directly to an accurate WAITING light.
+  The same fidelity as Claude. Older Codex versions without the hooks
   system fall back to the argv-based `notify` callback, which only fires
   on turn completion (no WAITING signal, but still gets you DONE/ERROR).
-- **Kimi**: stub adapter (`degraded` fidelity — a few key bindings, no
+- **Kimi**: stub adapter with degraded fidelity (a few key bindings, no
   event mapping yet, so it always shows IDLE). Contributions welcome; see
   `adapters/kimi.toml` and the other two adapters as a template.
 
@@ -165,7 +165,7 @@ openpad hooks uninstall
 ```
 
 Removes only the hook entries openpad added to `~/.claude/settings.json`
-(backing up the file first) — anything else in your settings is left
+(backing up the file first). Anything else in your settings is left
 untouched.
 
 ## License
