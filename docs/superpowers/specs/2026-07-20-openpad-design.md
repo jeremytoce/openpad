@@ -88,7 +88,7 @@ Stop          = "DONE"
 
 ## Layer map
 
-Row 1 is the **agent bar** on every layer: each key IS an agent — its LED shows that agent's state; pressing it binds the pad to that agent and focuses its pane. Key 16 (`⇧ LAYER`) holds for momentary layer 2, double-taps to lock.
+Row 1 is the **agent bar** on every layer: each key IS an agent — its LED shows that agent's state; pressing it binds the pad to that agent and focuses its pane. The **All** key broadcasts: while bound to All, steer/launch actions dispatch to every running agent, and its LED shows the most urgent state across agents (ERROR > WAITING > RUNNING > THINKING > DONE > IDLE). Key 16 (`⇧ LAYER`) holds for momentary layer 2, double-taps to lock.
 
 **Layer 1 — STEER**
 
