@@ -33,7 +33,7 @@ fn broadcast_sends_to_all_agents_with_action() {
 #[test]
 fn ingest_waiting_pulses_pad() {
     let mut e = engine();
-    e.on_ingest(IngestEvent { agent: "claude".into(), event: "Notification".into(), detail: None }, 1_000);
+    e.on_ingest(IngestEvent { agent: "claude".into(), event: "Notification".into(), detail: None, pane: None }, 1_000);
     e.on_tick(1_000);
     e.on_tick(1_600);
     let frames = &e.pad().frames;
@@ -83,4 +83,30 @@ fn prompt_uses_literal_text_path() {
     assert!(text_call.unwrap().contains(' '), "prompt text keeps its spaces");
     assert!(!calls.iter().any(|c| c.starts_with("send claude:0 Summarize")),
         "prompt must not go through the key-token path");
+}
+
+#[test]
+fn hook_events_teach_the_daemon_where_claude_lives() {
+    use openpad_daemon::ingest::IngestEvent;
+    use openpad_daemon::input::PhysKey;
+    use openpad_core::keymap::Layer;
+    let mut e = openpad_daemon::runloop::Engine::test_fixture();
+    // a claude session in tmux pane %7 fires SessionStart via the shim
+    e.on_ingest(IngestEvent {
+        agent: "claude".into(), event: "SessionStart".into(), detail: None,
+        pane: Some("%7".into()),
+    }, 0);
+    e.on_key(PhysKey::Key(Layer::Steer, 0)); // bind claude
+    e.on_key(PhysKey::Key(Layer::Steer, 4)); // approve
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.iter().any(|c| c.starts_with("send %7 ")),
+        "dispatch must target the discovered pane, got: {calls:?}");
+    // an event WITHOUT a pane (e.g. an IDE session) must not clear it
+    e.on_ingest(IngestEvent {
+        agent: "claude".into(), event: "Stop".into(), detail: None, pane: None,
+    }, 1_000);
+    e.on_key(PhysKey::Key(Layer::Steer, 4));
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.iter().filter(|c| c.starts_with("send %7 ")).count() >= 2,
+        "learned pane must survive pane-less events");
 }

@@ -89,6 +89,15 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
 
     pub fn on_ingest(&mut self, ev: IngestEvent, now_ms: u64) {
         let Some(i) = self.cfg.agents.iter().position(|a| a.name == ev.agent) else { return };
+        // Pane self-discovery: hook events announce the agent's live tmux
+        // pane ($TMUX_PANE via the shim). This overrides any configured
+        // static target, so no session-naming convention is needed. Events
+        // without a pane (agent not in tmux) never clear a learned target.
+        if let Some(pane) = &ev.pane {
+            if self.cfg.agents[i].tmux.as_deref() != Some(pane.as_str()) {
+                self.cfg.agents[i].tmux = Some(pane.clone());
+            }
+        }
         if let Some(state) = self.adapters[i].state_for(&ev.event) {
             self.sm.apply(&ev.agent, state, now_ms);
         }

@@ -234,11 +234,21 @@ impl Dispatcher for MacDispatcher {
     }
     fn focus(&self, t: &Target) -> Result<(), String> {
         if let Some(target) = &t.tmux {
-            let win = target.split(':').next().unwrap_or(target);
-            Command::new("tmux")
-                .args(["switch-client", "-t", win])
-                .status()
-                .map_err(|e| e.to_string())?;
+            if target.starts_with('%') {
+                // discovered pane id: land on the exact window and pane
+                let _ = Command::new("tmux").args(["select-window", "-t", target]).status();
+                let _ = Command::new("tmux").args(["select-pane", "-t", target]).status();
+                Command::new("tmux")
+                    .args(["switch-client", "-t", target])
+                    .status()
+                    .map_err(|e| e.to_string())?;
+            } else {
+                let win = target.split(':').next().unwrap_or(target);
+                Command::new("tmux")
+                    .args(["switch-client", "-t", win])
+                    .status()
+                    .map_err(|e| e.to_string())?;
+            }
         }
         Command::new("osascript")
             .args(["-e", "tell application \"iTerm2\" to activate"])

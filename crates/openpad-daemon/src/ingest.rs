@@ -1,6 +1,14 @@
 use std::sync::mpsc::Sender;
 
-pub struct IngestEvent { pub agent: String, pub event: String, pub detail: Option<String> }
+pub struct IngestEvent {
+    pub agent: String,
+    pub event: String,
+    pub detail: Option<String>,
+    /// tmux pane id (e.g. "%5") self-announced by the hook shim via
+    /// $TMUX_PANE; lets the daemon discover where an agent lives with no
+    /// session-naming convention. None when the agent isn't in tmux.
+    pub pane: Option<String>,
+}
 
 /// Percent-decode a query-string component: %XX -> byte, '+' -> space.
 /// Invalid escapes are passed through unchanged.
@@ -32,18 +40,22 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Extract the value of the `agent` query parameter, percent-decoded.
-fn parse_agent_param(query: &str) -> Option<String> {
+/// Extract the value of a query parameter by exact key, percent-decoded.
+fn parse_param(query: &str, want: &str) -> Option<String> {
     query.split('&').find_map(|pair| {
         let mut parts = pair.splitn(2, '=');
         let key = parts.next().unwrap_or("");
         let value = parts.next().unwrap_or("");
-        if key == "agent" {
+        if key == want {
             Some(percent_decode(value))
         } else {
             None
         }
     })
+}
+
+fn parse_agent_param(query: &str) -> Option<String> {
+    parse_param(query, "agent")
 }
 
 pub fn spawn_ingest(addr: &str, tx: Sender<IngestEvent>) -> std::io::Result<std::thread::JoinHandle<()>> {
@@ -72,8 +84,9 @@ pub fn spawn_ingest(addr: &str, tx: Sender<IngestEvent>) -> std::io::Result<std:
                     None => t.to_string(),
                 }
             });
+            let pane = parse_param(query, "pane").filter(|p| !p.is_empty());
             if !agent.is_empty() && !event.is_empty() {
-                let _ = tx.send(IngestEvent { agent, event, detail });
+                let _ = tx.send(IngestEvent { agent, event, detail, pane });
             }
             let _ = req.respond(tiny_http::Response::empty(204));
         }
