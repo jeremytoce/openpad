@@ -10,6 +10,7 @@ path = "src/main.rs"
 [dependencies]
 openpad-core = { path = "../openpad-core" }
 openpad-dispatch = { path = "../openpad-dispatch" }
+openpad-hid = { path = "../openpad-hid" }
 tiny_http = "0.12"
 serde_json = "1"
 serde = { version = "1", features = ["derive"] }
@@ -18,3 +19,7 @@ rdev = "0.5"
 
 [dev-dependencies]
 ureq = "2"
+openpad-daemon = { path = ".", features = ["test-fixtures"] }
+
+[features]
+test-fixtures = []

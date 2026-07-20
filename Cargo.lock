@@ -423,7 +423,9 @@ name = "openpad-daemon"
 version = "0.1.0"
 dependencies = [
  "openpad-core",
+ "openpad-daemon",
  "openpad-dispatch",
+ "openpad-hid",
  "rdev",
  "serde",
  "serde_json",
