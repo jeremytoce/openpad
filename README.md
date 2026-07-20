@@ -92,21 +92,23 @@ Full fidelity requires pasting the hooks snippet; the notify line alone
 only gives you done-only fidelity. We deliberately don't edit
 `~/.codex/config.toml` for you, since it isn't ours to own.
 
-### 4. Start your agent sessions in tmux
+### 4. Run your agents in tmux, anywhere
 
-openpad addresses agents by tmux session name. The default config expects
-`claude:0`, `codex:0`, and `kimi:0`. That is, a session named after the agent,
-with the agent running in window 0:
+No session names, no convention. Run `claude` (or `codex`, `kimi`) inside
+any tmux session, any window, any pane. The moment it starts, its own
+hooks announce the exact pane to the daemon (`$TMUX_PANE` travels with
+every hook event), and the pad targets it automatically. Start, kill, and
+restart agents freely; the pad follows.
 
 ```bash
-tmux new -s claude
-# inside the session:
+tmux
 claude
 ```
 
-Repeat for `codex` / `kimi` sessions as needed. You don't have to run all
-three. Openpad only lights up and steers agents whose tmux sessions
-actually exist.
+The static targets in `~/.config/openpad/config.toml` are only fallbacks
+for the moment before an agent's first hook fires. Agents running outside
+tmux still light the LEDs, but steering falls back to typing into the
+focused window.
 
 ### 5. Run the daemon
 
