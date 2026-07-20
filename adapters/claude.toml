@@ -1,0 +1,21 @@
+fidelity = "full"
+
+[actions]
+approve        = "1"
+approve_always = "2"
+reject         = "3"
+interrupt      = "Escape"
+ask            = ""            # focuses pane; typing is the user's
+plan           = "S-Tab"       # tmux send-keys token for shift-tab
+compact        = "/compact\n"
+clear          = "/clear\n"
+undo           = "Escape Escape"
+
+[events]
+SessionStart  = "IDLE"
+UserPromptSubmit = "THINKING"
+PreToolUse    = "RUNNING"
+PostToolUse   = "RUNNING"
+Notification  = "WAITING"
+Stop          = "DONE"
+SubagentStop  = "RUNNING"

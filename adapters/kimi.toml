@@ -1,0 +1,8 @@
+fidelity = "degraded"
+
+[actions]
+approve   = "y"
+reject    = "n"
+interrupt = "Escape"
+
+[events]

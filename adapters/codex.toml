@@ -1,0 +1,11 @@
+fidelity = "degraded"
+
+[actions]
+approve   = "y"
+reject    = "n"
+interrupt = "Escape"
+compact   = "/compact\n"
+clear     = "/new\n"
+
+[events]
+agent-turn-complete = "DONE"
