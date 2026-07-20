@@ -5,6 +5,15 @@ pub struct Target {
     pub tmux: Option<String>,
 }
 
+/// What the user is looking at, for adapter auto-selection: the focused
+/// terminal's active tmux pane (exact match against discovered agent panes)
+/// and the frontmost window title (fallback substring match).
+#[derive(Default, Clone)]
+pub struct FocusedContext {
+    pub pane: Option<String>,
+    pub title: Option<String>,
+}
+
 pub trait Dispatcher: Send {
     /// Key-token path for adapter action strings: whitespace-separated tmux
     /// key names ("Escape Escape" = two Escape presses, "S-Tab" = shift-tab).
@@ -14,6 +23,8 @@ pub trait Dispatcher: Send {
     fn send_text(&self, t: &Target, text: &str) -> Result<(), String>;
     fn focus(&self, t: &Target) -> Result<(), String>;
     fn fire_hotkey(&self, combo: &str) -> Result<(), String>;
+    /// Probe what the user is looking at (pane + window title).
+    fn focused_context(&self) -> FocusedContext;
 }
 
 /// Translate an adapter keystroke string into tmux send-keys args.
@@ -52,6 +63,7 @@ pub fn tmux_text_args(target: &str, text: &str) -> Vec<String> {
 #[derive(Default)]
 pub struct FakeDispatcher {
     pub calls: Mutex<Vec<String>>,
+    pub context: Mutex<FocusedContext>,
 }
 
 impl Dispatcher for FakeDispatcher {
@@ -79,6 +91,9 @@ impl Dispatcher for FakeDispatcher {
     fn fire_hotkey(&self, combo: &str) -> Result<(), String> {
         self.calls.lock().unwrap().push(format!("hotkey {combo}"));
         Ok(())
+    }
+    fn focused_context(&self) -> FocusedContext {
+        self.context.lock().unwrap().clone()
     }
 }
 
@@ -302,6 +317,25 @@ impl Dispatcher for MacDispatcher {
             .status()
             .map_err(|e| e.to_string())?;
         Ok(())
+    }
+    fn focused_context(&self) -> FocusedContext {
+        // Active tmux pane of the most recently used client; works from
+        // outside tmux, errors harmlessly when no server is running.
+        let pane = Command::new("tmux")
+            .args(["display-message", "-p", "#{pane_id}"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty());
+        let title = Command::new("osascript")
+            .args(["-e", "tell application \"System Events\" to get name of front window of (first application process whose frontmost is true)"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty());
+        FocusedContext { pane, title }
     }
 }
 

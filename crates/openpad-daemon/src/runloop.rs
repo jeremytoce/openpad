@@ -30,14 +30,36 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
         Target { tmux: self.cfg.agents[idx].tmux.clone() }
     }
 
-    /// Adapter keystrokes for the focused window. Which adapter? The one for
-    /// the agent most recently active; when in doubt, the first agent whose
-    /// adapter defines the action. In practice Claude/Codex share the core
-    /// verbs (y / Escape), so this resolves identically for steering keys.
+    /// Which agent is the user looking at? Exact match of the focused
+    /// terminal's active tmux pane against hook-discovered panes; else a
+    /// window-title substring match; else the encoder-selected agent.
+    fn focused_agent(&self) -> usize {
+        let ctx = self.dispatcher.focused_context();
+        if let Some(pane) = &ctx.pane {
+            if let Some(i) = self
+                .cfg
+                .agents
+                .iter()
+                .position(|a| a.tmux.as_deref() == Some(pane.as_str()))
+            {
+                return i;
+            }
+        }
+        if let Some(title) = &ctx.title {
+            let t = title.to_lowercase();
+            if let Some(i) = self.cfg.agents.iter().position(|a| t.contains(&a.name.to_lowercase())) {
+                return i;
+            }
+        }
+        self.selected
+    }
+
+    /// Adapter keystrokes for the focused window, using the focused window's
+    /// own agent profile. If that agent's adapter doesn't define the verb,
+    /// do nothing: sending another agent's keystroke into this window would
+    /// be exactly the wrong-target bug the focused model exists to prevent.
     fn send_action_focused(&self, action: &str) {
-        let idx = (0..self.adapters.len())
-            .find(|&i| self.adapters[i].keys_for(action).map_or(false, |k| !k.is_empty()))
-            .unwrap_or(self.selected);
+        let idx = self.focused_agent();
         if let Some(keys) = self.adapters[idx].keys_for(action) {
             if !keys.is_empty() {
                 let _ = self.dispatcher.send_keys(&Self::focused(), keys);

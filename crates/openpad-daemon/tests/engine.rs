@@ -127,3 +127,48 @@ fn prompt_uses_literal_text_path_into_focused_window() {
     assert!(text_call.is_some(), "prompt must go through send_text to the focused window, got: {calls:?}");
     assert!(text_call.unwrap().contains(' '), "prompt text keeps its spaces");
 }
+
+// Adapter auto-selection: the profile follows the focused window.
+
+#[test]
+fn focused_pane_selects_that_agents_adapter() {
+    let mut e = engine();
+    e.on_ingest(ev("codex", "SessionStart", Some("%2")), 0);
+    e.dispatcher().context.lock().unwrap().pane = Some("%2".into());
+    e.on_key(PhysKey::Key(Layer::Steer, 6)); // reject
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(
+        calls.iter().any(|c| c == "send focused Escape"),
+        "codex is focused, reject must be codex's Escape, not claude's n: {calls:?}"
+    );
+}
+
+#[test]
+fn window_title_selects_adapter_when_no_pane_match() {
+    let mut e = engine();
+    e.dispatcher().context.lock().unwrap().title = Some("codex — ~/dev/openpad".into());
+    e.on_key(PhysKey::Key(Layer::Steer, 6)); // reject
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.iter().any(|c| c == "send focused Escape"), "title match must pick codex: {calls:?}");
+}
+
+#[test]
+fn no_context_falls_back_to_selected_agent() {
+    let mut e = engine();
+    e.on_key(PhysKey::Key(Layer::Steer, 6)); // reject, nothing focused-identifiable
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.iter().any(|c| c == "send focused n"), "default selected agent is claude: {calls:?}");
+}
+
+#[test]
+fn focused_agent_lacking_the_verb_is_noop() {
+    let mut e = engine();
+    e.on_ingest(ev("kimi", "SessionStart", Some("%9")), 0);
+    e.dispatcher().context.lock().unwrap().pane = Some("%9".into());
+    e.on_key(PhysKey::Key(Layer::Steer, 12)); // plan: kimi doesn't define it
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(
+        !calls.iter().any(|c| c.starts_with("send ")),
+        "must not send another agent's keystroke into kimi's window: {calls:?}"
+    );
+}
