@@ -3,8 +3,8 @@ pub enum Layer { Steer, Launch }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
-    Bind(String),      // bind pad to agent + focus its pane
-    Broadcast,         // bind to all agents
+    Goto(String),      // focus the agent's discovered pane (LEDs summon, focus targets)
+    GotoWaiting,       // jump focus to whichever session is blocked on the user
     Agent(String),     // adapter action name, resolved per bound agent
     Mic,               // focus bound pane, then fire Wispr hotkey
     LayerHold,
@@ -26,10 +26,10 @@ impl Keymap {
     pub fn default_map() -> Keymap {
         use Action::*;
         let row1 = |arr: &mut [Option<Action>; 16]| {
-            arr[0] = Some(Bind("claude".into()));
-            arr[1] = Some(Bind("codex".into()));
-            arr[2] = Some(Bind("kimi".into()));
-            arr[3] = Some(Broadcast);
+            arr[0] = Some(Goto("claude".into()));
+            arr[1] = Some(Goto("codex".into()));
+            arr[2] = Some(Goto("kimi".into()));
+            arr[3] = Some(GotoWaiting);
         };
         let mut steer: [Option<Action>; 16] = Default::default();
         row1(&mut steer);
@@ -72,8 +72,8 @@ mod tests {
     fn default_map_row1_binds_agents_on_both_layers() {
         let km = Keymap::default_map();
         for layer in [Layer::Steer, Layer::Launch] {
-            assert!(matches!(km.action(layer, 0), Some(Action::Bind(a)) if a == "claude"));
-            assert!(matches!(km.action(layer, 3), Some(Action::Broadcast)));
+            assert!(matches!(km.action(layer, 0), Some(Action::Goto(a)) if a == "claude"));
+            assert!(matches!(km.action(layer, 3), Some(Action::GotoWaiting)));
         }
     }
 

@@ -156,7 +156,38 @@ pub(crate) fn osascript_key_token_script(tok: &str) -> String {
     }
 }
 
-pub struct MacDispatcher;
+pub struct MacDispatcher {
+    /// Frontmost apps the focused-window path may synthesize keys into.
+    /// Empty = allow all (not recommended; config supplies defaults).
+    pub terminal_apps: Vec<String>,
+}
+
+impl MacDispatcher {
+    pub fn new(terminal_apps: Vec<String>) -> Self {
+        MacDispatcher { terminal_apps }
+    }
+
+    /// Frontmost application process name via System Events.
+    fn frontmost_app() -> Option<String> {
+        let out = Command::new("osascript")
+            .args(["-e", "tell application \"System Events\" to get name of first application process whose frontmost is true"])
+            .output()
+            .ok()?;
+        let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if name.is_empty() { None } else { Some(name) }
+    }
+
+    /// Gate for the focused-window path: only type into allowlisted apps.
+    fn focused_window_allowed(&self) -> bool {
+        if self.terminal_apps.is_empty() {
+            return true;
+        }
+        match Self::frontmost_app() {
+            Some(app) => self.terminal_apps.iter().any(|t| t == &app),
+            None => false,
+        }
+    }
+}
 
 impl Dispatcher for MacDispatcher {
     fn send_keys(&self, t: &Target, keys: &str) -> Result<(), String> {
@@ -174,8 +205,11 @@ impl Dispatcher for MacDispatcher {
                 }
             }
             None => {
-                // focused-window fallback: each key token becomes its own
+                // focused-window path: each key token becomes its own
                 // System Events command (named keys mapped to key codes).
+                if !self.focused_window_allowed() {
+                    return Ok(()); // frontmost app not in the terminal allowlist
+                }
                 let (body, enter) = match keys.strip_suffix('\n') {
                     Some(b) => (b, true),
                     None => (keys, false),
@@ -223,6 +257,9 @@ impl Dispatcher for MacDispatcher {
                 Ok(())
             }
             None => {
+                if !self.focused_window_allowed() {
+                    return Ok(()); // frontmost app not in the terminal allowlist
+                }
                 let script = osascript_keystroke_script(text);
                 Command::new("osascript")
                     .args(["-e", &script])

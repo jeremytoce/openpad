@@ -7,6 +7,10 @@ pub struct Config {
     pub prompts: BTreeMap<u8, String>,
     pub wispr_hotkey_osascript: String,
     pub ingest_addr: String,
+    /// Frontmost apps steering keys may synthesize into. A press with any
+    /// other app focused is a no-op (a stray approve must never type "y"
+    /// into Slack).
+    pub terminal_apps: Vec<String>,
 }
 
 pub struct AgentCfg {
@@ -23,10 +27,17 @@ struct RawAgent {
     tmux: Option<String>,
 }
 
+fn default_terminal_apps() -> Vec<String> {
+    ["iTerm2", "Terminal", "WezTerm", "Alacritty", "kitty", "Warp", "Ghostty", "Code", "Cursor"]
+        .into_iter().map(String::from).collect()
+}
+
 #[derive(Deserialize)]
 struct Raw {
     ingest_addr: String,
     wispr_hotkey_osascript: String,
+    #[serde(default = "default_terminal_apps")]
+    terminal_apps: Vec<String>,
     #[serde(default)]
     agents: Vec<RawAgent>,
     #[serde(default)]
@@ -40,20 +51,22 @@ pub fn default_toml() -> &'static str {
 # hotkey (see docs/verification.md, Task 5 Step 4)
 wispr_hotkey_osascript = "key code 41 using {option down}"  # Option+; — verified PTT binding on this machine
 
+# Steering keys act on the focused window; agents in tmux additionally
+# self-announce their pane via hooks, which powers the goto keys.
+# terminal_apps is the allowlist of frontmost apps keys may type into:
+# terminal_apps = ["iTerm2", "Terminal", "WezTerm", "Alacritty", "kitty", "Warp", "Ghostty", "Code", "Cursor"]
+
 [[agents]]
 name = "claude"
 adapter = "claude"
-tmux = "claude:0"
 
 [[agents]]
 name = "codex"
 adapter = "codex"
-tmux = "codex:0"
 
 [[agents]]
 name = "kimi"
 adapter = "kimi"
-tmux = "kimi:0"
 
 [prompts]
 1 = "Summarize the current state of this task and what remains."
@@ -81,6 +94,7 @@ pub fn parse(src: &str) -> Result<Config, String> {
             .collect(),
         prompts,
         wispr_hotkey_osascript: raw.wispr_hotkey_osascript,
+        terminal_apps: raw.terminal_apps,
         ingest_addr: raw.ingest_addr,
     })
 }
@@ -109,8 +123,9 @@ mod tests {
         let cfg = parse(default_toml()).unwrap();
         assert_eq!(cfg.agents.len(), 3);
         assert_eq!(cfg.agents[0].name, "claude");
-        assert_eq!(cfg.agents[0].tmux.as_deref(), Some("claude:0"));
+        assert_eq!(cfg.agents[0].tmux, None, "panes are discovered via hooks, not configured");
         assert_eq!(cfg.ingest_addr, "127.0.0.1:7676");
+        assert!(cfg.terminal_apps.iter().any(|a| a == "iTerm2"), "allowlist has defaults");
         assert_eq!(cfg.prompts.get(&1).map(|s| s.as_str()), Some("Summarize the current state of this task and what remains."));
     }
 

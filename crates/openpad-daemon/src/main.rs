@@ -341,11 +341,13 @@ fn run() {
     match HidPad::open() {
         Ok(pad) => {
             println!("openpad: pad connected");
-            run_loop(cfg, adapters, MacDispatcher, pad, key_rx, ingest_rx)
+            let dispatcher = MacDispatcher::new(cfg.terminal_apps.clone());
+            run_loop(cfg, adapters, dispatcher, pad, key_rx, ingest_rx)
         }
         Err(e) => {
             eprintln!("openpad: warning: pad not found ({e}); running without RGB output");
-            run_loop(cfg, adapters, MacDispatcher, NullPad, key_rx, ingest_rx)
+            let dispatcher = MacDispatcher::new(cfg.terminal_apps.clone());
+            run_loop(cfg, adapters, dispatcher, NullPad, key_rx, ingest_rx)
         }
     }
 }

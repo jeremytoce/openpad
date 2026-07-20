@@ -1,7 +1,7 @@
-use openpad_daemon::runloop::Engine;
-use openpad_daemon::input::PhysKey;
-use openpad_daemon::ingest::IngestEvent;
 use openpad_core::keymap::Layer;
+use openpad_daemon::ingest::IngestEvent;
+use openpad_daemon::input::PhysKey;
+use openpad_daemon::runloop::Engine;
 use openpad_dispatch::FakeDispatcher;
 use openpad_hid::FakePad;
 
@@ -9,31 +9,83 @@ fn engine() -> Engine<FakeDispatcher, FakePad> {
     Engine::test_fixture() // helper: default config + shipped adapters + fakes
 }
 
+fn ev(agent: &str, event: &str, pane: Option<&str>) -> IngestEvent {
+    IngestEvent {
+        agent: agent.into(),
+        event: event.into(),
+        detail: None,
+        pane: pane.map(String::from),
+    }
+}
+
+// Spec revision 2: steering acts on the focused window. The safety property
+// is visual; approving requires looking at the target.
+
 #[test]
-fn approve_dispatches_bound_agent_keystroke() {
+fn approve_synthesizes_into_focused_window() {
     let mut e = engine();
-    e.on_key(PhysKey::Key(Layer::Steer, 0));      // bind claude
-    e.on_key(PhysKey::Key(Layer::Steer, 4));      // approve
+    e.on_key(PhysKey::Key(Layer::Steer, 4)); // approve
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert!(calls.iter().any(|c| c == "focus claude:0"));
-    assert!(calls.iter().any(|c| c.starts_with("send claude:0 ")), "approve keystroke sent");
+    assert!(
+        calls.iter().any(|c| c.starts_with("send focused ")),
+        "approve must target the focused window, got: {calls:?}"
+    );
+    assert!(
+        !calls.iter().any(|c| c.starts_with("focus ")),
+        "steering must never move focus"
+    );
 }
 
 #[test]
-fn broadcast_sends_to_all_agents_with_action() {
+fn goto_key_focuses_discovered_pane() {
     let mut e = engine();
-    e.on_key(PhysKey::Key(Layer::Steer, 3));      // All
-    e.on_key(PhysKey::Key(Layer::Steer, 7));      // interrupt (all three adapters define it)
+    e.on_ingest(ev("claude", "SessionStart", Some("%7")), 0);
+    e.on_key(PhysKey::Key(Layer::Steer, 0)); // goto claude
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    for t in ["claude:0", "codex:0", "kimi:0"] {
-        assert!(calls.iter().any(|c| c.contains(&format!("send {t}"))), "{t} missing");
-    }
+    assert!(calls.iter().any(|c| c == "focus %7"), "goto focuses the discovered pane, got: {calls:?}");
+}
+
+#[test]
+fn goto_without_discovered_pane_is_noop() {
+    let mut e = engine();
+    e.on_key(PhysKey::Key(Layer::Steer, 0)); // goto claude, nothing discovered
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.is_empty(), "no pane known yet, nothing to focus, got: {calls:?}");
+}
+
+#[test]
+fn pane_less_events_do_not_clear_discovery() {
+    let mut e = engine();
+    e.on_ingest(ev("claude", "SessionStart", Some("%7")), 0);
+    e.on_ingest(ev("claude", "Stop", None), 1_000); // e.g. an IDE session
+    e.on_key(PhysKey::Key(Layer::Steer, 0));
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.iter().any(|c| c == "focus %7"), "learned pane must survive pane-less events");
+}
+
+#[test]
+fn goto_waiting_jumps_to_the_blocked_agent() {
+    let mut e = engine();
+    e.on_ingest(ev("claude", "SessionStart", Some("%1")), 0);
+    e.on_ingest(ev("codex", "PermissionRequest", Some("%2")), 100); // codex WAITING
+    e.on_key(PhysKey::Key(Layer::Steer, 3)); // goto-waiting
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.iter().any(|c| c == "focus %2"), "must jump to the waiting session, got: {calls:?}");
+}
+
+#[test]
+fn goto_waiting_is_noop_when_nobody_waits() {
+    let mut e = engine();
+    e.on_ingest(ev("claude", "SessionStart", Some("%1")), 0); // IDLE, pane known
+    e.on_key(PhysKey::Key(Layer::Steer, 3));
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.is_empty(), "nobody is blocked; jumping anywhere would be noise, got: {calls:?}");
 }
 
 #[test]
 fn ingest_waiting_pulses_pad() {
     let mut e = engine();
-    e.on_ingest(IngestEvent { agent: "claude".into(), event: "Notification".into(), detail: None, pane: None }, 1_000);
+    e.on_ingest(ev("claude", "Notification", None), 1_000);
     e.on_tick(1_000);
     e.on_tick(1_600);
     let frames = &e.pad().frames;
@@ -42,71 +94,36 @@ fn ingest_waiting_pulses_pad() {
 }
 
 #[test]
-fn mic_focuses_then_fires_hotkey_in_order() {
+fn mic_fires_hotkey_without_moving_focus() {
     let mut e = engine();
-    e.on_key(PhysKey::Key(Layer::Steer, 0));      // bind claude
-    e.on_key(PhysKey::Key(Layer::Steer, 8));      // mic
+    e.on_key(PhysKey::Key(Layer::Steer, 8)); // mic
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    let f = calls.iter().position(|c| c == "focus claude:0").unwrap();
-    let h = calls.iter().position(|c| c.starts_with("hotkey ")).unwrap();
-    assert!(f < h, "must focus before firing Wispr hotkey");
+    assert!(calls.iter().any(|c| c.starts_with("hotkey ")));
+    assert!(!calls.iter().any(|c| c.starts_with("focus ")), "mic dictates into the focused window");
 }
 
 #[test]
-fn unknown_action_for_agent_is_noop_not_error() {
+fn action_no_adapter_defines_is_noop() {
     let mut e = engine();
-    e.on_key(PhysKey::Key(Layer::Steer, 2));      // bind kimi (no 'plan' action)
-    let before = e.dispatcher().calls.lock().unwrap().len();
-    e.on_key(PhysKey::Key(Layer::Steer, 12));     // plan
-    let after = e.dispatcher().calls.lock().unwrap().len();
-    assert_eq!(before, after, "missing adapter action must be a complete no-op");
+    e.on_key(PhysKey::Key(Layer::Steer, 10)); // branch: no adapter defines it
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.is_empty(), "undefined action must be a complete no-op, got: {calls:?}");
 }
 
 #[test]
 fn empty_action_is_noop() {
     let mut e = engine();
-    e.on_key(PhysKey::Key(Layer::Steer, 0));      // bind claude
-    let before = e.dispatcher().calls.lock().unwrap().len();
-    e.on_key(PhysKey::Key(Layer::Steer, 9));      // ask (claude maps this to "")
-    let after = e.dispatcher().calls.lock().unwrap().len();
-    assert_eq!(before, after, "empty-string adapter action must be a complete no-op");
+    e.on_key(PhysKey::Key(Layer::Steer, 9)); // ask: claude maps it to ""
+    let calls = e.dispatcher().calls.lock().unwrap().clone();
+    assert!(calls.is_empty(), "empty-string adapter action must be a complete no-op, got: {calls:?}");
 }
 
 #[test]
-fn prompt_uses_literal_text_path() {
-    let mut e = openpad_daemon::runloop::Engine::test_fixture();
-    e.on_key(openpad_daemon::input::PhysKey::Key(openpad_core::keymap::Layer::Steer, 0)); // bind claude
-    e.on_key(openpad_daemon::input::PhysKey::Key(openpad_core::keymap::Layer::Launch, 8)); // Prompt 1
+fn prompt_uses_literal_text_path_into_focused_window() {
+    let mut e = engine();
+    e.on_key(PhysKey::Key(Layer::Launch, 8)); // Prompt 1
     let calls = e.dispatcher().calls.lock().unwrap().clone();
-    let text_call = calls.iter().find(|c| c.starts_with("text claude:0 "));
-    assert!(text_call.is_some(), "prompt must go through send_text, got: {calls:?}");
+    let text_call = calls.iter().find(|c| c.starts_with("text focused "));
+    assert!(text_call.is_some(), "prompt must go through send_text to the focused window, got: {calls:?}");
     assert!(text_call.unwrap().contains(' '), "prompt text keeps its spaces");
-    assert!(!calls.iter().any(|c| c.starts_with("send claude:0 Summarize")),
-        "prompt must not go through the key-token path");
-}
-
-#[test]
-fn hook_events_teach_the_daemon_where_claude_lives() {
-    use openpad_daemon::ingest::IngestEvent;
-    use openpad_daemon::input::PhysKey;
-    use openpad_core::keymap::Layer;
-    let mut e = openpad_daemon::runloop::Engine::test_fixture();
-    // a claude session in tmux pane %7 fires SessionStart via the shim
-    e.on_ingest(IngestEvent {
-        agent: "claude".into(), event: "SessionStart".into(), detail: None,
-        pane: Some("%7".into()),
-    }, 0);
-    e.on_key(PhysKey::Key(Layer::Steer, 0)); // bind claude
-    e.on_key(PhysKey::Key(Layer::Steer, 4)); // approve
-    let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert!(calls.iter().any(|c| c.starts_with("send %7 ")),
-        "dispatch must target the discovered pane, got: {calls:?}");
-    // an event WITHOUT a pane (e.g. an IDE session) must not clear it
-    e.on_ingest(IngestEvent {
-        agent: "claude".into(), event: "Stop".into(), detail: None, pane: None,
-    }, 1_000);
-    e.on_key(PhysKey::Key(Layer::Steer, 4));
-    let calls = e.dispatcher().calls.lock().unwrap().clone();
-    assert!(calls.iter().filter(|c| c.starts_with("send %7 ")).count() >= 2,
-        "learned pane must survive pane-less events");
 }

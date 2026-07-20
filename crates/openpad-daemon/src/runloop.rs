@@ -8,8 +8,7 @@ pub struct Engine<D: Dispatcher, P: PadLink> {
     adapters: Vec<Adapter>, // parallel to cfg.agents
     keymap: Keymap,
     sm: StateMachine,
-    bound: usize, // index into cfg.agents
-    broadcast: bool,
+    selected: usize, // encoder-selected agent for goto (dispatch never uses it)
     dispatcher: D,
     pad: P,
 }
@@ -18,21 +17,30 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
     pub fn new(cfg: Config, adapters: Vec<Adapter>, dispatcher: D, pad: P) -> Self {
         let names: Vec<&str> = cfg.agents.iter().map(|a| a.name.as_str()).collect();
         let sm = StateMachine::new(&names);
-        Engine { cfg, adapters, keymap: Keymap::default_map(), sm, bound: 0, broadcast: false, dispatcher, pad }
+        Engine { cfg, adapters, keymap: Keymap::default_map(), sm, selected: 0, dispatcher, pad }
     }
 
-    fn target(&self, idx: usize) -> Target {
+    /// Steering always acts on the focused window. The safety property is
+    /// visual: you approve what you are looking at. (Spec revision 2.)
+    fn focused() -> Target {
+        Target { tmux: None }
+    }
+
+    fn pane_target(&self, idx: usize) -> Target {
         Target { tmux: self.cfg.agents[idx].tmux.clone() }
     }
 
-    fn send_action(&self, idx: usize, action: &str) {
-        // Steering actions must reach the bound agent's pane without stealing
-        // window focus. Focus jumps happen only on explicit Bind (row-1 keys),
-        // EncoderPush(1), and Mic (focus-then-dictate is deliberate) -- never
-        // here.
+    /// Adapter keystrokes for the focused window. Which adapter? The one for
+    /// the agent most recently active; when in doubt, the first agent whose
+    /// adapter defines the action. In practice Claude/Codex share the core
+    /// verbs (y / Escape), so this resolves identically for steering keys.
+    fn send_action_focused(&self, action: &str) {
+        let idx = (0..self.adapters.len())
+            .find(|&i| self.adapters[i].keys_for(action).map_or(false, |k| !k.is_empty()))
+            .unwrap_or(self.selected);
         if let Some(keys) = self.adapters[idx].keys_for(action) {
             if !keys.is_empty() {
-                let _ = self.dispatcher.send_keys(&self.target(idx), keys);
+                let _ = self.dispatcher.send_keys(&Self::focused(), keys);
             }
         }
     }
@@ -42,34 +50,42 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
             PhysKey::Key(layer, key) => {
                 let Some(action) = self.keymap.action(layer, key).cloned() else { return };
                 match action {
-                    Action::Bind(name) => {
+                    Action::Goto(name) => {
                         if let Some(i) = self.cfg.agents.iter().position(|a| a.name == name) {
-                            self.bound = i;
-                            self.broadcast = false;
-                            let _ = self.dispatcher.focus(&self.target(i));
-                        }
-                    }
-                    Action::Broadcast => {
-                        self.broadcast = true;
-                    }
-                    Action::Agent(name) => {
-                        if self.broadcast {
-                            for i in 0..self.cfg.agents.len() {
-                                self.send_action(i, &name);
+                            self.selected = i;
+                            if self.cfg.agents[i].tmux.is_some() {
+                                let _ = self.dispatcher.focus(&self.pane_target(i));
                             }
-                        } else {
-                            self.send_action(self.bound, &name);
                         }
                     }
+                    Action::GotoWaiting => {
+                        // jump to the blocked (or errored) agent with a known
+                        // pane; no-op when nobody actually needs the user
+                        use openpad_core::state::{urgency, AgentState};
+                        let snapshot = self.sm.snapshot();
+                        let target = snapshot
+                            .iter()
+                            .enumerate()
+                            .filter(|(i, (_, s))| {
+                                self.cfg.agents[*i].tmux.is_some()
+                                    && urgency(*s) >= urgency(AgentState::Waiting)
+                            })
+                            .max_by_key(|(_, (_, s))| urgency(*s));
+                        if let Some((i, _)) = target {
+                            self.selected = i;
+                            let _ = self.dispatcher.focus(&self.pane_target(i));
+                        }
+                    }
+                    Action::Agent(name) => self.send_action_focused(&name),
                     Action::Mic => {
-                        let _ = self.dispatcher.focus(&self.target(self.bound));
+                        // fires into the focused window, like everything else
                         let _ = self.dispatcher.fire_hotkey(&self.cfg.wispr_hotkey_osascript);
                     }
                     Action::Prompt(n) => {
                         if let Some(text) = self.cfg.prompts.get(&n) {
                             // literal-text path: spaces must not be parsed as key names
                             let msg = format!("{text}\n");
-                            let _ = self.dispatcher.send_text(&self.target(self.bound), &msg);
+                            let _ = self.dispatcher.send_text(&Self::focused(), &msg);
                         }
                     }
                     Action::Shell(_) | Action::LayerHold => { /* layer handled on-pad; shell in later plan */ }
@@ -77,11 +93,12 @@ impl<D: Dispatcher, P: PadLink> Engine<D, P> {
             }
             PhysKey::EncoderTurn(1, dir) => {
                 let n = self.cfg.agents.len();
-                self.bound = (self.bound as i64 + dir as i64).rem_euclid(n as i64) as usize;
-                self.broadcast = false;
+                self.selected = (self.selected as i64 + dir as i64).rem_euclid(n as i64) as usize;
             }
             PhysKey::EncoderPush(1) => {
-                let _ = self.dispatcher.focus(&self.target(self.bound));
+                if self.cfg.agents[self.selected].tmux.is_some() {
+                    let _ = self.dispatcher.focus(&self.pane_target(self.selected));
+                }
             }
             _ => { /* enc 0 (scroll) and enc 2 (model tier) in later plan */ }
         }
