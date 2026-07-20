@@ -50,6 +50,40 @@ impl Dispatcher for FakeDispatcher {
     }
 }
 
+/// Build an osascript keystroke command. Handles escaping and newline conversion.
+/// Trailing '\n' becomes "& return" (AppleScript's keystroke return).
+/// Escapes backslashes first, then quotes.
+pub(crate) fn osascript_keystroke_script(keys: &str) -> String {
+    let has_newline = keys.ends_with('\n');
+    let text = if has_newline {
+        &keys[..keys.len() - 1]
+    } else {
+        keys
+    };
+
+    // Escape backslashes first, then quotes
+    let escaped = text
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+
+    if text.is_empty() && has_newline {
+        // Just a newline: send keystroke return
+        "tell application \"System Events\" to keystroke return".to_string()
+    } else if has_newline {
+        // Text with newline: keystroke "text" & return
+        format!(
+            "tell application \"System Events\" to keystroke \"{}\" & return",
+            escaped
+        )
+    } else {
+        // Just text: keystroke "text"
+        format!(
+            "tell application \"System Events\" to keystroke \"{}\"",
+            escaped
+        )
+    }
+}
+
 pub struct MacDispatcher;
 
 impl Dispatcher for MacDispatcher {
@@ -69,10 +103,7 @@ impl Dispatcher for MacDispatcher {
             }
             None => {
                 // focused-window fallback: System Events keystroke
-                let script = format!(
-                    "tell application \"System Events\" to keystroke \"{}\"",
-                    keys.replace('"', "\\\"")
-                );
+                let script = osascript_keystroke_script(keys);
                 Command::new("osascript")
                     .args(["-e", &script])
                     .status()
@@ -128,5 +159,67 @@ mod dispatch_tests {
         let d = FakeDispatcher::default();
         d.send_keys(&Target { tmux: Some("claude:0".into()) }, "1").unwrap();
         assert_eq!(d.calls.lock().unwrap().as_slice(), ["send claude:0 1"]);
+    }
+
+    #[test]
+    fn fake_dispatcher_focus_records_exact_format() {
+        let d = FakeDispatcher::default();
+        d.focus(&Target { tmux: Some("work:0".into()) }).unwrap();
+        assert_eq!(d.calls.lock().unwrap().as_slice(), ["focus work:0"]);
+    }
+
+    #[test]
+    fn fake_dispatcher_hotkey_records_exact_format() {
+        let d = FakeDispatcher::default();
+        d.fire_hotkey("key code 64 using {control down}").unwrap();
+        assert_eq!(d.calls.lock().unwrap().as_slice(), ["hotkey key code 64 using {control down}"]);
+    }
+
+    #[test]
+    fn osascript_keystroke_simple_text() {
+        assert_eq!(
+            osascript_keystroke_script("y"),
+            "tell application \"System Events\" to keystroke \"y\""
+        );
+    }
+
+    #[test]
+    fn osascript_keystroke_with_trailing_newline() {
+        assert_eq!(
+            osascript_keystroke_script("/compact\n"),
+            "tell application \"System Events\" to keystroke \"/compact\" & return"
+        );
+    }
+
+    #[test]
+    fn osascript_keystroke_newline_only() {
+        assert_eq!(
+            osascript_keystroke_script("\n"),
+            "tell application \"System Events\" to keystroke return"
+        );
+    }
+
+    #[test]
+    fn osascript_keystroke_escaped_quotes() {
+        assert_eq!(
+            osascript_keystroke_script("say \"hi\""),
+            "tell application \"System Events\" to keystroke \"say \\\"hi\\\"\""
+        );
+    }
+
+    #[test]
+    fn osascript_keystroke_escaped_backslash() {
+        assert_eq!(
+            osascript_keystroke_script("a\\b"),
+            "tell application \"System Events\" to keystroke \"a\\\\b\""
+        );
+    }
+
+    #[test]
+    fn osascript_keystroke_backslash_and_quote() {
+        assert_eq!(
+            osascript_keystroke_script("path\\\"file\""),
+            "tell application \"System Events\" to keystroke \"path\\\\\\\"file\\\"\""
+        );
     }
 }
